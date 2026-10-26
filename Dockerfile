@@ -1,10 +1,10 @@
 # ---- 构建阶段 ----
-    FROM node:20-alpine AS builder
+    FROM node:24-alpine AS builder
     WORKDIR /app
     
     # 只拷贝依赖文件，安装依赖
-    COPY package.json pnpm-lock.yaml ./
-    RUN npm install -g pnpm && pnpm install --frozen-lockfile
+    COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+    RUN npm install -g pnpm@11.25.0 && pnpm install --frozen-lockfile
     
     # 拷贝全部源码（含 public、lib、.next.config.js/ts 等）
     COPY . .
@@ -19,7 +19,7 @@
     RUN echo "=== lib/data/ ===" && ls -lh /app/lib/data || true
     
     # ---- 运行阶段 ----
-    FROM node:20-alpine AS runner
+    FROM node:24-alpine AS runner
     WORKDIR /app
 
     # 拷贝 standalone 产物和静态文件
@@ -58,4 +58,3 @@
     # 使用初始化脚本启动应用
     ENTRYPOINT ["/app/init-data.sh"]
     CMD ["node", "server.js"]
-    

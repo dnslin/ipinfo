@@ -1,5 +1,4 @@
-import type { City, Asn } from "@maxmind/geoip2-node";
-import type { Names } from "@maxmind/geoip2-node/dist/src/records";
+import type { City, Asn, Names } from "@maxmind/geoip2-node";
 
 // MaxMind City查询结果类型（基于@maxmind/geoip2-node的City类型）
 export type MaxMindCityResult = City;

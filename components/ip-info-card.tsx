@@ -39,11 +39,117 @@ interface IPInfoCardProps {
   ipData: IPInfo;
 }
 
+// 检查是否为有效的国家代码
+const isValidCountryCode = (code: string) => {
+  return (
+    code &&
+    code.length === 2 &&
+    code !== "XX" &&
+    code !== "--" &&
+    code.toUpperCase() !== "PRIVATE" &&
+    code.toUpperCase() !== "ZZ" &&
+    code !== "**"
+  );
+};
+
+// 检查是否为私有IP
+const isPrivateIP = (ip: string) => {
+  // 私有IPv4地址范围
+  const privateIPv4Ranges = [
+    /^10\./,
+    /^192\.168\./,
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+    /^127\./,
+    /^169\.254\./,
+    /^0\.0\.0\.0$/,
+    /^255\.255\.255\.255$/,
+  ];
+
+  // 私有IPv6地址
+  const privateIPv6Ranges = [
+    /^::1$/,
+    /^fc[0-9a-f]{2}:/i,
+    /^fd[0-9a-f]{2}:/i,
+    /^fe80:/i,
+  ];
+
+  return (
+    privateIPv4Ranges.some((range) => range.test(ip)) ||
+    privateIPv6Ranges.some((range) => range.test(ip))
+  );
+};
+
+// 国旗组件，带有错误处理
+const CountryFlagWithFallback = ({
+  countryCode,
+  ip,
+  country,
+  style,
+  className = "",
+}: {
+  countryCode: string;
+  ip: string;
+  country: string;
+  style?: React.CSSProperties;
+  className?: string;
+}) => {
+  const isPrivate = isPrivateIP(ip);
+  const [failedCountry, setFailedCountry] = useState<string | null>(null);
+
+  if (!isValidCountryCode(countryCode) || isPrivate) {
+    return (
+      <div
+        className={`bg-gradient-to-br from-gray-100 to-gray-200 rounded flex items-center justify-center ${className}`}
+        style={style}
+        title={isPrivate ? "私有地址" : "未知地区"}
+      >
+        {isPrivate ? (
+          <Shield className="w-3 h-3 text-gray-600" />
+        ) : (
+          <Globe className="w-3 h-3 text-gray-500" />
+        )}
+      </div>
+    );
+  }
+
+  if (failedCountry === countryCode) {
+    return (
+      <div
+        className={`bg-gray-200 rounded flex items-center justify-center ${className}`}
+        style={style}
+        title="国旗加载失败"
+      >
+        <Globe className="w-3 h-3 text-gray-500" />
+      </div>
+    );
+  }
+
+  return (
+    <ReactCountryFlag
+      countryCode={countryCode.toUpperCase()}
+      svg
+      style={style}
+      className={className}
+      title={country}
+      onError={() => setFailedCountry(countryCode)}
+    />
+  );
+};
+
 export default function IPInfoCard({ ipData }: IPInfoCardProps) {
   const [currentTime, setCurrentTime] = useState<string>("");
   const [isTracing, setIsTracing] = useState(false);
-  const [tracedData, setTracedData] = useState<IPInfo | null>(null);
-  const [currentData, setCurrentData] = useState<IPInfo>(ipData);
+  const [queryData, setQueryData] = useState<{
+    originalData: IPInfo;
+    tracedData: IPInfo | null;
+  }>({ originalData: ipData, tracedData: null });
+
+  if (queryData.originalData !== ipData) {
+    setQueryData({ originalData: ipData, tracedData: null });
+  }
+
+  const tracedData = queryData.originalData === ipData ? queryData.tracedData : null;
+  const currentData = tracedData ?? ipData;
   const [isBGPDialogOpen, setIsBGPDialogOpen] = useState(false);
   const [selectedASN, setSelectedASN] = useState<{
     asn: number;
@@ -72,8 +178,7 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
       }
 
       const meituanData: IPInfo = await response.json();
-      setTracedData(meituanData);
-      setCurrentData(meituanData);
+      setQueryData({ originalData: ipData, tracedData: meituanData });
 
       toast.success("溯源成功", {
         description: `已获取美团数据源的详细位置信息`,
@@ -93,8 +198,7 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
 
   // 重置到原始数据
   const resetToOriginal = () => {
-    setCurrentData(ipData);
-    setTracedData(null);
+    setQueryData({ originalData: ipData, tracedData: null });
   };
 
   // Update current time only on client side to avoid hydration mismatch
@@ -120,12 +224,6 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
 
     return () => clearInterval(interval);
   }, [currentData.timezone]);
-
-  // 当原始数据变化时，重置状态
-  useEffect(() => {
-    setCurrentData(ipData);
-    setTracedData(null);
-  }, [ipData]);
 
   // BGP 对话框处理函数
   const handleASNClick = (asn: number, name?: string) => {
@@ -201,46 +299,6 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
     }
   };
 
-  // 检查是否为有效的国家代码
-  const isValidCountryCode = (code: string) => {
-    return (
-      code &&
-      code.length === 2 &&
-      code !== "XX" &&
-      code !== "--" &&
-      code.toUpperCase() !== "PRIVATE" &&
-      code.toUpperCase() !== "ZZ" &&
-      code !== "**"
-    );
-  };
-
-  // 检查是否为私有IP
-  const isPrivateIP = (ip: string) => {
-    // 私有IPv4地址范围
-    const privateIPv4Ranges = [
-      /^10\./,
-      /^192\.168\./,
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-      /^127\./,
-      /^169\.254\./,
-      /^0\.0\.0\.0$/,
-      /^255\.255\.255\.255$/,
-    ];
-
-    // 私有IPv6地址
-    const privateIPv6Ranges = [
-      /^::1$/,
-      /^fc[0-9a-f]{2}:/i,
-      /^fd[0-9a-f]{2}:/i,
-      /^fe80:/i,
-    ];
-
-    return (
-      privateIPv4Ranges.some((range) => range.test(ip)) ||
-      privateIPv6Ranges.some((range) => range.test(ip))
-    );
-  };
-
   // 格式化位置信息（支持美团数据）
   const formatLocationWithMeituan = () => {
     if (currentData.source === "MeiTuan" && currentData.meituan?.areaName) {
@@ -256,57 +314,6 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
 
     // 原始数据格式
     return formatLocation();
-  };
-
-  // 国旗组件，带有错误处理
-  const CountryFlagWithFallback = ({
-    countryCode,
-    style,
-    className = "",
-  }: {
-    countryCode: string;
-    style?: React.CSSProperties;
-    className?: string;
-  }) => {
-    const isPrivate = isPrivateIP(currentData.ip);
-
-    if (!isValidCountryCode(countryCode) || isPrivate) {
-      return (
-        <div
-          className={`bg-gradient-to-br from-gray-100 to-gray-200 rounded flex items-center justify-center ${className}`}
-          style={style}
-          title={isPrivate ? "私有地址" : "未知地区"}
-        >
-          {isPrivate ? (
-            <Shield className="w-3 h-3 text-gray-600" />
-          ) : (
-            <Globe className="w-3 h-3 text-gray-500" />
-          )}
-        </div>
-      );
-    }
-
-    try {
-      return (
-        <ReactCountryFlag
-          countryCode={countryCode.toUpperCase()}
-          svg
-          style={style}
-          className={className}
-          title={currentData.country}
-        />
-      );
-    } catch {
-      return (
-        <div
-          className={`bg-gray-200 rounded flex items-center justify-center ${className}`}
-          style={style}
-          title="国旗加载失败"
-        >
-          <Globe className="w-3 h-3 text-gray-500" />
-        </div>
-      );
-    }
   };
 
   const formatLocation = () => {
@@ -417,6 +424,8 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
                   </span>
                   <div className="flex items-center space-x-2">
                     <CountryFlagWithFallback
+                      ip={currentData.ip}
+                      country={currentData.country}
                       countryCode={currentData.countryCode}
                       style={{
                         width: "1.2em",
@@ -524,6 +533,8 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
               <div className="pl-6 md:pl-7 space-y-4 md:space-y-3">
                 <div className="flex items-center space-x-3">
                   <CountryFlagWithFallback
+                    ip={currentData.ip}
+                    country={currentData.country}
                     countryCode={currentData.countryCode}
                     style={{
                       width: "2em",
@@ -841,6 +852,8 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
                     </div>
                     <div className="flex items-center space-x-2">
                       <CountryFlagWithFallback
+                        ip={currentData.ip}
+                        country={currentData.country}
                         countryCode={currentData.registered_country.code}
                         style={{
                           width: "1.2em",
@@ -892,6 +905,8 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
                     </div>
                     <div className="flex items-center space-x-2">
                       <CountryFlagWithFallback
+                        ip={currentData.ip}
+                        country={currentData.country}
                         countryCode={currentData.countryCode}
                         style={{
                           width: "1.2em",

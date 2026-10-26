@@ -8,12 +8,14 @@ export function PlaceholdersAndVanishInput({
   placeholders,
   onChange,
   onSubmit,
-  value: externalValue,
+  value,
+  onVanishComplete,
 }: {
   placeholders: string[];
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
-  value?: string;
+  value: string;
+  onVanishComplete: () => void;
 }) {
   const [currentPlaceholder, setCurrentPlaceholder] = useState(0);
 
@@ -53,15 +55,7 @@ export function PlaceholdersAndVanishInput({
   }
   const newDataRef = useRef<PixelData[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState("");
   const [animating, setAnimating] = useState(false);
-
-  // 支持受控模式 - 当外部value变化时，更新内部value
-  useEffect(() => {
-    if (externalValue !== undefined) {
-      setValue(externalValue);
-    }
-  }, [externalValue]);
 
   const draw = useCallback(() => {
     if (!inputRef.current) return;
@@ -159,7 +153,7 @@ export function PlaceholdersAndVanishInput({
         if (newDataRef.current.length > 0) {
           animateFrame(pos - 8);
         } else {
-          setValue("");
+          onVanishComplete();
           setAnimating(false);
         }
       });
@@ -212,7 +206,6 @@ export function PlaceholdersAndVanishInput({
       <input
         onChange={(e) => {
           if (!animating) {
-            setValue(e.target.value);
             if (onChange) {
               onChange(e);
             }

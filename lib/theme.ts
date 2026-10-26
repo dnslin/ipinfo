@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -30,22 +30,29 @@ const getStoredTheme = (): Theme => {
   }
 };
 
-// 解析最终主题
-const resolveTheme = (theme: Theme): "light" | "dark" => {
-  return theme === "system" ? getSystemTheme() : theme;
+const subscribeToSystemTheme = (onChange: () => void) => {
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  mediaQuery.addEventListener("change", onChange);
+  return () => mediaQuery.removeEventListener("change", onChange);
+};
+
+const getServerSystemTheme = (): "light" | "dark" => "light";
+
+// 应用主题到DOM
+const applyTheme = (resolvedTheme: "light" | "dark") => {
+  const root = document.documentElement;
+  root.classList.remove("light", "dark");
+  root.classList.add(resolvedTheme);
 };
 
 export const useTheme = (): ThemeContextValue => {
-  const [theme, setThemeState] = useState<Theme>("system");
-  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
-
-  // 应用主题到DOM
-  const applyTheme = (newResolvedTheme: "light" | "dark") => {
-    const root = document.documentElement;
-    root.classList.remove("light", "dark");
-    root.classList.add(newResolvedTheme);
-    setResolvedTheme(newResolvedTheme);
-  };
+  const [theme, setThemeState] = useState<Theme>(getStoredTheme);
+  const systemTheme = useSyncExternalStore(
+    subscribeToSystemTheme,
+    getSystemTheme,
+    getServerSystemTheme,
+  );
+  const resolvedTheme = theme === "system" ? systemTheme : theme;
 
   // 设置主题
   const setTheme = (newTheme: Theme) => {
@@ -59,43 +66,20 @@ export const useTheme = (): ThemeContextValue => {
     }
 
     // 应用解析后的主题
-    const newResolvedTheme = resolveTheme(newTheme);
+    const newResolvedTheme = newTheme === "system" ? getSystemTheme() : newTheme;
     applyTheme(newResolvedTheme);
   };
 
   // 切换主题（在light和dark之间切换）
   const toggleTheme = () => {
-    const currentResolved = resolveTheme(theme);
-    const newTheme = currentResolved === "light" ? "dark" : "light";
+    const newTheme = resolvedTheme === "light" ? "dark" : "light";
     setTheme(newTheme);
   };
 
-  // 初始化主题
+  // 将初始化和系统配色变化同步到页面
   useEffect(() => {
-    const storedTheme = getStoredTheme();
-    setThemeState(storedTheme);
-
-    const initialResolvedTheme = resolveTheme(storedTheme);
-    applyTheme(initialResolvedTheme);
-  }, []);
-
-  // 监听系统主题变化
-  useEffect(() => {
-    if (theme !== "system") return;
-
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-
-    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
-      const newSystemTheme = e.matches ? "dark" : "light";
-      applyTheme(newSystemTheme);
-    };
-
-    mediaQuery.addEventListener("change", handleSystemThemeChange);
-
-    return () => {
-      mediaQuery.removeEventListener("change", handleSystemThemeChange);
-    };
-  }, [theme]);
+    applyTheme(theme === "system" ? getSystemTheme() : theme);
+  }, [theme, systemTheme]);
 
   return {
     theme,

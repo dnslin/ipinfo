@@ -9,6 +9,36 @@ import { motion, AnimatePresence } from "framer-motion";
 import { PlaceholdersAndVanishInput } from "@/components/ui/placeholders-and-vanish-input";
 import { toast } from "sonner";
 
+const SafeCountryFlag = ({
+  countryCode,
+  style,
+}: {
+  countryCode: string;
+  style?: React.CSSProperties;
+}) => {
+  const [failedCountry, setFailedCountry] = useState<string | null>(null);
+
+  if (failedCountry === countryCode) {
+    return (
+      <div
+        className="bg-gray-200 rounded flex items-center justify-center"
+        style={style}
+      >
+        <Globe className="w-2 h-2 text-gray-500" />
+      </div>
+    );
+  }
+
+  return (
+    <ReactCountryFlag
+      countryCode={countryCode}
+      svg
+      style={style}
+      onError={() => setFailedCountry(countryCode)}
+    />
+  );
+};
+
 export default function IPQueryForm() {
   const [inputValue, setInputValue] = useState("");
   const [validationError, setValidationError] = useState("");
@@ -86,27 +116,6 @@ export default function IPQueryForm() {
     await executeQuery();
   };
 
-  // 安全的国旗组件
-  const SafeCountryFlag = ({
-    countryCode,
-    style,
-  }: {
-    countryCode: string;
-    style?: React.CSSProperties;
-  }) => {
-    try {
-      return <ReactCountryFlag countryCode={countryCode} svg style={style} />;
-    } catch {
-      return (
-        <div
-          className="bg-gray-200 rounded flex items-center justify-center"
-          style={style}
-        >
-          <Globe className="w-2 h-2 text-gray-500" />
-        </div>
-      );
-    }
-  };
 
   return (
     <motion.div
@@ -122,6 +131,7 @@ export default function IPQueryForm() {
           onChange={handleInputChangeForVanishInput}
           onSubmit={handleSubmit}
           value={inputValue}
+          onVanishComplete={() => setInputValue("")}
         />
 
         {/* 加载状态覆盖层 */}

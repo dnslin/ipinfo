@@ -1,18 +1,21 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useSyncExternalStore } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sun, Moon } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
 
+const subscribeToHydration = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export default function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  // 确保组件挂载后才渲染，避免水合不匹配
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    subscribeToHydration,
+    getClientSnapshot,
+    getServerSnapshot,
+  );
 
   // 圆形扩散切换主题效果
   const toggleThemeWithAnimation = (event: React.MouseEvent) => {
@@ -144,11 +147,11 @@ export default function ThemeToggle() {
 // 紧凑版主题切换器（用于移动端或空间受限的地方）
 export function CompactThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    subscribeToHydration,
+    getClientSnapshot,
+    getServerSnapshot,
+  );
 
   const toggleTheme = () => {
     const newTheme = resolvedTheme === "dark" ? "light" : "dark";
@@ -206,4 +209,4 @@ export function CompactThemeToggle() {
       </AnimatePresence>
     </motion.button>
   );
-} 
+}

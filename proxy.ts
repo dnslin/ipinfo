@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getClientIP, getUserIPVersion } from "@/lib/ip-detection";
 
-export function middleware(request: NextRequest) {
-  const url = request.nextUrl.clone();
+export function proxy(request: NextRequest) {
+  const url = new URL(request.url);
   const hostname = request.headers.get("host") || "";
 
   // 解析子域名

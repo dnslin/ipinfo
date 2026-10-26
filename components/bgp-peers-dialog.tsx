@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -28,26 +28,51 @@ export default function BGPPeersDialog({
   isOpen, 
   onClose 
 }: BGPPeersDialogProps) {
-  const [bgpData, setBgpData] = useState<ProcessedBGPData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [protocolType, setProtocolType] = useState<ProtocolType>('both');
 
-  const fetchBGPData = useCallback(async () => {
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="!max-w-[95vw] w-full max-h-[90vh] overflow-hidden bg-white/98 backdrop-blur-sm sm:!max-w-[95vw]">
+        <BGPPeersContent
+          key={asn}
+          asn={asn}
+          asnName={asnName}
+          protocolType={protocolType}
+          setProtocolType={setProtocolType}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BGPPeersContent({
+  asn,
+  asnName,
+  protocolType,
+  setProtocolType,
+}: Pick<BGPPeersDialogProps, 'asn' | 'asnName'> & {
+  protocolType: ProtocolType;
+  setProtocolType: (protocol: ProtocolType) => void;
+}) {
+  const [bgpData, setBgpData] = useState<ProcessedBGPData | null>(null);
+  const [isLoading, setIsLoading] = useState(Boolean(asn));
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+
+  useEffect(() => {
     if (!asn) return;
-    
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const data = await fetchBGPPeers(asn);
+
+    let cancelled = false;
+    fetchBGPPeers(asn).then((data) => {
+      if (cancelled) return;
       setBgpData(data);
       
       toast.success("BGP 数据获取成功", {
         description: `找到 ${data.allPeers.length} 个对等关系`,
         duration: 1000,
       });
-    } catch (err) {
+    }).catch((err) => {
+      if (cancelled) return;
       const errorMessage = err instanceof Error ? err.message : 'BGP 数据获取失败';
       setError(errorMessage);
       
@@ -55,33 +80,21 @@ export default function BGPPeersDialog({
         description: errorMessage,
         duration: 4000,
       });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [asn]);
+    }).finally(() => {
+      if (!cancelled) setIsLoading(false);
+    });
 
-  // 当对话框打开且 ASN 改变时，获取数据
-  useEffect(() => {
-    if (isOpen && asn) {
-      fetchBGPData();
-    }
-  }, [isOpen, asn, fetchBGPData]);
-
-  // 当对话框关闭时重置状态
-  useEffect(() => {
-    if (!isOpen) {
-      setBgpData(null);
-      setError(null);
-    }
-  }, [isOpen]);
+    return () => { cancelled = true; };
+  }, [asn, retryCount]);
 
   const handleRetry = () => {
-    fetchBGPData();
+    setIsLoading(true);
+    setError(null);
+    setRetryCount((count) => count + 1);
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="!max-w-[95vw] w-full max-h-[90vh] overflow-hidden bg-white/98 backdrop-blur-sm sm:!max-w-[95vw]">
+    <>
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <Network className="w-5 h-5 text-blue-500" />
@@ -324,7 +337,6 @@ export default function BGPPeersDialog({
             </div>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+    </>
   );
-} 
+}

@@ -1,20 +1,21 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useSyncExternalStore } from 'react';
 import { motion } from 'framer-motion';
 import { Wifi, Globe, Settings } from 'lucide-react';
 
-export default function VersionSwitcher() {
-  const [currentDomain, setCurrentDomain] = useState('');
-  const [baseDomain, setBaseDomain] = useState('');
-  const [isClient, setIsClient] = useState(false);
+const subscribeToLocation = () => () => {};
+const getCurrentDomain = () => window.location.hostname;
+const getServerDomain = () => '';
 
-  useEffect(() => {
-    setIsClient(true);
-    const domain = window.location.hostname;
-    setCurrentDomain(domain);
-    setBaseDomain(domain.replace(/^(ip4?\.|ip6?\.)/, ''));
-  }, []);
+export default function VersionSwitcher() {
+  const currentDomain = useSyncExternalStore(
+    subscribeToLocation,
+    getCurrentDomain,
+    getServerDomain,
+  );
+  const baseDomain = currentDomain.replace(/^(ip4?\.|ip6?\.)/, '');
+  const isClient = currentDomain !== '';
   
   const versions = [
     {
@@ -103,4 +104,4 @@ export default function VersionSwitcher() {
       </div>
     </div>
   );
-} 
+}

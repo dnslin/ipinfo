@@ -93,12 +93,12 @@ export class GeoIPReader {
 
   private validateDatabaseFiles(): void {
     const files = [
-      { path: MAXMIND_CITY_PATH, name: "MaxMind City" },
-      { path: MAXMIND_ASN_PATH, name: "MaxMind ASN" },
-      { path: GEOCN_PATH, name: "GeoCN" },
+      { exists: fs.existsSync(MAXMIND_CITY_PATH), name: "MaxMind City" },
+      { exists: fs.existsSync(MAXMIND_ASN_PATH), name: "MaxMind ASN" },
+      { exists: fs.existsSync(GEOCN_PATH), name: "GeoCN" },
     ];
 
-    const missingFiles = files.filter((file) => !fs.existsSync(file.path));
+    const missingFiles = files.filter((file) => !file.exists);
 
     if (missingFiles.length === files.length) {
       throw new GeoIPError("找不到任何MMDB数据库文件", "DB_NOT_FOUND");
