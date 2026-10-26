@@ -42,9 +42,24 @@ test("RIPE RIS observations are grouped by protocol and repeated ASNs are dedupl
   assert.deepEqual(data.allPeers[0], {
     asn: 174,
     name: "AS174",
-    description: "RIPE RIS 观测到的 ASN 邻接关系",
+    description: "",
     country_code: "",
   });
+});
+
+test("large ASN observations without protocol counters remain visible without inventing protocols", async () => {
+  mock.method(globalThis, "fetch", async () => Response.json({ status: "ok", data: { neighbours: [
+    { asn: 10352, type: "left" },
+    { asn: 10796, type: "left" },
+    { asn: 10352, type: "right" },
+    { asn: 174, type: "left", v4_peers: 5 },
+  ] } }));
+  const response = await query("6939");
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.deepEqual(data.allPeers.map((peer: { asn: number }) => peer.asn), [10352, 10796, 174]);
+  assert.deepEqual(data.ipv4Peers.map((peer: { asn: number }) => peer.asn), [174]);
+  assert.deepEqual(data.ipv6Peers, []);
 });
 
 test("an ASN with no RIS observations returns an empty result", async () => {
@@ -83,6 +98,7 @@ test("malformed upstream observations fail explicitly instead of producing empty
     { status: "ok", data: {} },
     { status: "ok", data: { neighbours: null } },
     { status: "ok", data: { neighbours: [{ asn: 174, v4_peers: "3", v6_peers: 0 }] } },
+    { status: "ok", data: { neighbours: [{ asn: 174, v4_peers: null }] } },
     { status: "ok", data: { neighbours: [{ asn: -1, v4_peers: 3, v6_peers: 0 }] } },
     { status: "ok", data: { neighbours: [{ asn: 174, v4_peers: 3, v6_peers: -1 }] } },
   ]) {

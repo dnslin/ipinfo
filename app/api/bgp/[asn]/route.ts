@@ -3,16 +3,16 @@ import type { BGPPeer, ProcessedBGPData } from "@/lib/bgp-api";
 
 interface RISNeighbour {
   asn: number;
-  v4_peers: number;
-  v6_peers: number;
+  v4_peers?: number;
+  v6_peers?: number;
 }
 
 function isRISNeighbour(value: unknown): value is RISNeighbour {
   if (typeof value !== "object" || value === null) return false;
   const neighbour = value as RISNeighbour;
   return Number.isInteger(neighbour.asn) && neighbour.asn > 0 && neighbour.asn <= 4294967295
-    && Number.isInteger(neighbour.v4_peers) && neighbour.v4_peers >= 0
-    && Number.isInteger(neighbour.v6_peers) && neighbour.v6_peers >= 0;
+    && (neighbour.v4_peers === undefined || (Number.isInteger(neighbour.v4_peers) && neighbour.v4_peers >= 0))
+    && (neighbour.v6_peers === undefined || (Number.isInteger(neighbour.v6_peers) && neighbour.v6_peers >= 0));
 }
 
 export async function GET(
@@ -59,11 +59,11 @@ export async function GET(
       const peer: BGPPeer = {
         asn: neighbour.asn,
         name: `AS${neighbour.asn}`,
-        description: "RIPE RIS 观测到的 ASN 邻接关系",
+        description: "",
         country_code: "",
       };
-      if (neighbour.v4_peers > 0) ipv4Peers.set(neighbour.asn, peer);
-      if (neighbour.v6_peers > 0) ipv6Peers.set(neighbour.asn, peer);
+      if (neighbour.v4_peers !== undefined && neighbour.v4_peers > 0) ipv4Peers.set(neighbour.asn, peer);
+      if (neighbour.v6_peers !== undefined && neighbour.v6_peers > 0) ipv6Peers.set(neighbour.asn, peer);
       allPeers.set(neighbour.asn, peer);
     }
 
