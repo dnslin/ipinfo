@@ -20,22 +20,19 @@ export interface IPDetectionSource {
   timeout: number;
 }
 
-// IP版本检测
+// IPv6 交给浏览器与服务端共有的 URL 解析器处理压缩和映射格式。
 export function detectIPVersion(ip: string): "IPv4" | "IPv6" | "invalid" {
-  // 去除空格和其他字符
+  if (typeof ip !== "string") return "invalid";
   const cleanIP = ip.trim();
-
-  // IPv4正则表达式
-  const ipv4Regex =
-    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-
-  // IPv6正则表达式（完整和压缩格式）
-  const ipv6Regex =
-    /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
-
+  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$/;
   if (ipv4Regex.test(cleanIP)) return "IPv4";
-  if (ipv6Regex.test(cleanIP)) return "IPv6";
-  return "invalid";
+  if (!cleanIP.includes(":") || !/^[0-9a-fA-F:.]+$/.test(cleanIP)) return "invalid";
+  try {
+    new URL(`http://[${cleanIP}]/`);
+    return "IPv6";
+  } catch {
+    return "invalid";
+  }
 }
 
 /**
@@ -64,30 +61,6 @@ function extractPublicIPFromForwardedHeader(
     if (detectIPVersion(ip) !== "invalid") {
       return ip;
     }
-  }
-
-  return null;
-}
-
-/**
- * 获取直接连接的IP地址（回退方案）
- * @param request NextRequest对象
- * @returns 直接连接的IP地址或null
- */
-function getDirectConnectionIP(request: NextRequest): string | null {
-  // 尝试从request对象获取IP（Next.js可能提供）
-  // 注意：这个方法在不同的部署环境中可能不同
-  try {
-    // 尝试从URL对象获取
-    if (request.nextUrl && request.nextUrl.hostname) {
-      const hostname = request.nextUrl.hostname;
-      // 如果hostname是IP地址，返回它
-      if (detectIPVersion(hostname) !== "invalid") {
-        return hostname;
-      }
-    }
-  } catch (error) {
-    console.warn("获取直接连接IP失败:", error);
   }
 
   return null;
@@ -156,12 +129,6 @@ export function getClientIP(request: NextRequest): string | null {
     if (extractedIP && detectIPVersion(extractedIP) !== "invalid") {
       return extractedIP;
     }
-  }
-
-  // 所有头部都失败，尝试回退方案
-  const directIP = getDirectConnectionIP(request);
-  if (directIP && detectIPVersion(directIP) !== "invalid") {
-    return directIP;
   }
 
   return null;
@@ -331,7 +298,14 @@ function checkPrivateIPv4(ip: string): PrivateIPCheckResult {
 
 // 检查IPv6地址是否为私有或不可达地址
 function checkPrivateIPv6(ip: string): PrivateIPCheckResult {
-  const normalizedIP = ip.toLowerCase();
+  const normalizedIP = new URL(`http://[${ip.trim()}]/`).hostname.slice(1, -1);
+  const firstWord = parseInt(normalizedIP.split(":")[0] || "0", 16);
+
+  if (normalizedIP.startsWith("::ffff:")) {
+    const words = normalizedIP.slice(7).split(":").map((word) => parseInt(word, 16));
+    const ipv4 = [words[0] >> 8, words[0] & 255, words[1] >> 8, words[1] & 255].join(".");
+    return checkPrivateIPv4(ipv4);
+  }
 
   // 回环地址
   if (normalizedIP === "::1") {
@@ -356,7 +330,7 @@ function checkPrivateIPv6(ip: string): PrivateIPCheckResult {
   }
 
   // 链路本地地址
-  if (normalizedIP.startsWith("fe80:")) {
+  if ((firstWord & 0xffc0) === 0xfe80) {
     return {
       isPrivate: true,
       type: "link_local",
@@ -367,7 +341,7 @@ function checkPrivateIPv6(ip: string): PrivateIPCheckResult {
   }
 
   // 唯一本地地址（ULA）
-  if (normalizedIP.startsWith("fc") || normalizedIP.startsWith("fd")) {
+  if ((firstWord & 0xfe00) === 0xfc00) {
     return {
       isPrivate: true,
       type: "unique_local",
@@ -418,33 +392,7 @@ export function checkPrivateIP(ip: string): PrivateIPCheckResult {
 
 // 判断是否为私有/内网IP
 export function isPrivateIP(ip: string): boolean {
-  const version = detectIPVersion(ip);
-
-  if (version === "IPv4") {
-    const parts = ip.split(".").map(Number);
-    // 10.0.0.0/8
-    if (parts[0] === 10) return true;
-    // 172.16.0.0/12
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-    // 192.168.0.0/16
-    if (parts[0] === 192 && parts[1] === 168) return true;
-    // 127.0.0.0/8 (localhost)
-    if (parts[0] === 127) return true;
-    // 169.254.0.0/16 (link-local)
-    if (parts[0] === 169 && parts[1] === 254) return true;
-  }
-
-  if (version === "IPv6") {
-    const lowerIP = ip.toLowerCase();
-    // ::1 (localhost)
-    if (lowerIP === "::1") return true;
-    // fe80::/10 (link-local)
-    if (lowerIP.startsWith("fe80:")) return true;
-    // fc00::/7 (unique local)
-    if (lowerIP.startsWith("fc") || lowerIP.startsWith("fd")) return true;
-  }
-
-  return false;
+  return checkPrivateIP(ip).isPrivate;
 }
 
 // 外部IP检测源配置
