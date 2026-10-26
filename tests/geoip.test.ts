@@ -7,6 +7,7 @@ import { City, Asn, Reader } from "@maxmind/geoip2-node";
 import { DataMerger } from "../lib/geoip/merger";
 import { DatabaseDownloader, databaseDownloader, type DatabaseStatus } from "../lib/geoip/downloader";
 import { GeoIPService } from "../lib/geoip";
+import { globalIPCache } from "../lib/geoip/cache";
 import { GeoIPReader, geoIPReader } from "../lib/geoip/reader";
 import { StartupCheckService, startupCheckService } from "../lib/geoip/startup-check";
 import { POST as initializeDatabase } from "../app/api/init/route";
@@ -249,7 +250,7 @@ test("queries arriving while optional readers open wait for the same complete in
   }
 });
 
-test("POST initialization retries missing supplemental databases after basic querying already works", async (t) => {
+test("POST initialization refreshes cached service results after missing supplemental databases recover", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "ipinfo-retry-test-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const fixturePath = join(directory, "test.mmdb");
@@ -265,13 +266,31 @@ test("POST initialization retries missing supplemental databases after basic que
   t.mock.method(databaseDownloader, "downloadMissingDatabases", async () => statuses());
   geoIPReader.destroy();
   startupCheckService.reset();
-  t.after(() => { geoIPReader.destroy(); startupCheckService.reset(); });
+  globalIPCache.clear();
+  t.after(() => { geoIPReader.destroy(); startupCheckService.reset(); globalIPCache.clear(); });
+  const service = new GeoIPService();
 
   assert.equal((await initializeDatabase()).status, 200);
-  assert.equal((await geoIPReader.queryIP("8.8.8.8"))[0].asnData, undefined);
+  assert.equal((await service.queryIPInfo("8.8.8.8")).as, undefined);
   asnAvailable = true;
   assert.equal((await initializeDatabase()).status, 200);
-  assert.equal((await geoIPReader.queryIP("8.8.8.8"))[0].asnData?.autonomousSystemNumber, 15169);
+  assert.equal((await service.queryIPInfo("8.8.8.8")).as?.number, 15169);
+});
+
+test("failed POST initialization preserves usable cached query results", async (t) => {
+  globalIPCache.clear();
+  startupCheckService.reset();
+  t.after(() => { globalIPCache.clear(); startupCheckService.reset(); });
+  t.mock.method(geoIPReader, "initialize", async () => {});
+  t.mock.method(geoIPReader, "queryIP", async () => [maxmind({ country: { isoCode: "US", names: { en: "United States" } } })]);
+  const service = new GeoIPService();
+  const cached = await service.queryIPInfo("8.8.8.8");
+  t.mock.method(databaseDownloader, "checkDatabases", async () => databaseStatuses([]));
+  t.mock.method(geoIPReader, "refresh", async () => { throw new Error("upstream unavailable"); });
+
+  assert.equal((await initializeDatabase()).status, 503);
+  assert.deepEqual(await service.queryIPInfo("8.8.8.8"), cached);
+  assert.equal(globalIPCache.get("8.8.8.8")?.as?.number, 15169);
 });
 
 // Official MaxMind binary fixture (1141 bytes), kept inline for offline tests.

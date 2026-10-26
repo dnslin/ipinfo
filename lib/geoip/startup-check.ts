@@ -1,5 +1,6 @@
 import { databaseDownloader, type DatabaseStatus } from "./downloader";
 import { geoIPReader } from "./reader";
+import { globalIPCache } from "./cache";
 
 export interface StartupCheckStatus {
   isChecking: boolean;
@@ -55,6 +56,7 @@ export class StartupCheckService {
       // Explicit initialization retries missing supplements; normal lookups reuse open readers.
       await geoIPReader.refresh();
       await this.checkDatabases();
+      globalIPCache.clear();
     } catch (error) {
       await this.checkDatabases();
       this.status.canQuery = false;
