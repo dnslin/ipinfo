@@ -1,6 +1,6 @@
 # IPInfo
 
-基于 Next.js、React 和 TypeScript 的 IP 信息查询工具，支持 IPv4/IPv6 地理位置查询、运营商与 ASN 信息、Leaflet 地图、BGP 对等体和深浅主题切换。
+基于 Next.js、React 和 TypeScript 的 IP 信息查询工具，支持 IPv4/IPv6 地理位置查询、运营商与 ASN 信息、Leaflet 地图、BGP 邻接观测和深浅主题切换。
 
 ## 本地开发
 
@@ -48,7 +48,13 @@ IP 定位无法代表设备或街道位置。不同数据库的地区与坐标�
 
 地图使用 Leaflet 和 [OpenStreetMap 标准底图](https://operations.osmfoundation.org/policies/tiles/)，由浏览器直接请求并遵循 HTTP 缓存，保留可见署名。底图仅按当前视图加载，不提供批量或离线下载；深浅主题共用同一底图。BGP 使用 [RIPE RIS 邻接观测](https://stat.ripe.net/docs/data-api/api-endpoints/asn-neighbours)，不把观测到的相邻网络推断为商业对等关系或 Tier 层级。
 
-美团溯源和代理检测仍依赖外部服务。外部服务拒绝查询或未提供数据时会保留具体错误，不用其他来源冒充成功结果。IPv4/IPv6 版本入口依赖实际部署的 `ip`、`ip4`、`ip6` 子域名和对应网络配置，本地预览不能验证双栈入口。
+美团溯源和代理检测仍依赖外部服务。美团未收录某个 IP 时返回 HTTP 404 和 `MEITUAN_LOCATION_NOT_FOUND`，界面保留当前查询结果并说明未收录；连接或上游服务失败返回 503。原始诊断信息保留在服务端，不用其他来源冒充成功结果。IPv4/IPv6 版本入口依赖实际部署的 `ip`、`ip4`、`ip6` 子域名和对应网络配置，本地预览禁用无法切换的协议入口。
+
+## 界面与主题
+
+查询结果按地理位置、网络信息和地图分组；注册、区域代码与时区可在“更多信息”中展开。界面沿用浅色版本的清晰层级，使用共享的颜色、按钮和圆角样式。暗色模式采用中性背景，主题切换立即生效并保存选择，不执行整页扩散或叠加颜色动画。存储不可用时遵循系统主题。
+
+BGP 默认展示完整邻接列表，支持 ASN、名称、描述搜索和协议筛选，每页 20 条。选中一个 ASN 后，关系图只显示它与查询目标的已观测关系，保留缩放、平移与 PNG 导出。返回列表会保留搜索和页码。上游对大型 ASN 未提供协议计数时，邻接仍保留，明确显示“协议未提供”；协议筛选只包含已标记的记录。
 
 ## Docker
 
@@ -73,7 +79,7 @@ docker run -d --name ipinfo -p 3000:3000 -v "$(pwd)/data:/app/lib/data" ipinfo
 | --- | --- | --- |
 | `/api/query` | GET | 查询请求中识别到的客户端 IP |
 | `/api/query` | POST | 查询 JSON 请求体中的 `ip`，留空时识别客户端 IP |
-| `/api/bgp/[asn]` | GET | 查询指定 ASN 的 BGP 对等体 |
+| `/api/bgp/[asn]` | GET | 查询指定 ASN 的 BGP 邻接观测；协议未知的记录仅列入 `allPeers` |
 | `/api/meituan` | POST | 查询指定 IP 的补充地理信息 |
 | `/api/proxy-detection` | GET / POST | 检测代理使用情况；POST 需传入 `enableProxyDetection: true` |
 | `/api/init` | GET / POST | 查看数据库初始化状态 / 执行初始化 |
