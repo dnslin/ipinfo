@@ -84,41 +84,6 @@ export const CHINESE_ISP_ASN_MAP: { [key: number]: string } = {
   36492: "谷歌云",
 };
 
-// 中国省份标准化列表
-export const CHINESE_PROVINCES = [
-  "内蒙古",
-  "黑龙江",
-  "河北",
-  "山西",
-  "吉林",
-  "辽宁",
-  "江苏",
-  "浙江",
-  "安徽",
-  "福建",
-  "江西",
-  "山东",
-  "河南",
-  "湖北",
-  "湖南",
-  "广东",
-  "海南",
-  "四川",
-  "贵州",
-  "云南",
-  "陕西",
-  "甘肃",
-  "青海",
-  "广西",
-  "西藏",
-  "宁夏",
-  "新疆",
-  "北京",
-  "天津",
-  "上海",
-  "重庆",
-];
-
 // 特别行政区映射
 export const SPECIAL_REGIONS_MAP: { [key: string]: string } = {
   香港: "中国香港",
@@ -131,22 +96,14 @@ export const LANGUAGE_PRIORITY = ["zh-CN", "en"];
 
 // GeoCN数据库查询结果
 export interface GeoCNResult {
-  country?: string;
-  province?: string;
-  city?: string;
-  district?: string;
+  division_code?: number | bigint;
   isp?: string;
   type?: string;
-  desc?: string;
-  lat?: number;
-  lng?: number;
 }
 
 // 数据源信息
 export interface DataSourceInfo {
   source: "maxmind" | "geocn";
-  accuracy: number;
-  completeness: number;
   timestamp: number;
 }
 
@@ -172,42 +129,6 @@ export interface QueryConfig {
   defaultTTL: number;
   preferredSource: "auto" | "maxmind" | "geocn";
   fallbackEnabled: boolean;
-}
-
-// Nominatim API响应类型
-export interface NominatimResult {
-  place_id: number;
-  licence: string;
-  osm_type: string;
-  osm_id: number;
-  lat: string;
-  lon: string;
-  class: string;
-  type: string;
-  place_rank: number;
-  importance: number;
-  addresstype: string;
-  name: string;
-  display_name: string;
-  boundingbox: string[];
-}
-
-// 地理编码配置
-export interface GeocodeConfig {
-  cacheEnabled: boolean;
-  cacheTTL: number; // 秒
-  requestTimeout: number; // 毫秒
-  maxRetries: number;
-  rateLimitDelay: number; // 毫秒
-  nominatimBaseUrl: string;
-}
-
-// 坐标结果
-export interface CoordinateResult {
-  latitude: number;
-  longitude: number;
-  accuracy?: string;
-  source: "geocn" | "nominatim";
 }
 
 // 错误类型

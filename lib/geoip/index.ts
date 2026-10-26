@@ -10,19 +10,12 @@ import { isPrivateIP, detectIPVersion } from "../ip-detection";
  * 集成数据库读取、数据合并和缓存功能
  */
 export class GeoIPService {
-  private initialized = false;
-
   /**
    * 初始化GeoIP服务
    */
   async initialize(): Promise<void> {
-    if (this.initialized) return;
-
     try {
-      // 初始化数据库读取器（数据库下载已在middleware中处理）
       await geoIPReader.initialize();
-      this.initialized = true;
-      console.log("GeoIP服务初始化完成");
     } catch (error) {
       throw new GeoIPError(
         `GeoIP服务初始化失败: ${
@@ -37,11 +30,6 @@ export class GeoIPService {
    * 查询IP地理位置信息
    */
   async queryIPInfo(ip: string): Promise<IPInfo> {
-    // 确保服务已初始化
-    if (!this.initialized) {
-      await this.initialize();
-    }
-
     try {
       // 1. 检查缓存
       const cached = globalIPCache.get(ip);
@@ -56,7 +44,7 @@ export class GeoIPService {
         return privateIPInfo;
       }
 
-      // 3. 查询数据库
+      await this.initialize();
       const rawResults = await geoIPReader.queryIP(ip);
 
       // 4. 合并数据源
@@ -93,15 +81,14 @@ export class GeoIPService {
       countryCode: "PRIVATE",
       city: "本地网络",
       location: {
-        latitude: 0,
-        longitude: 0,
-        accuracy_radius: 0,
+        latitude: null,
+        longitude: null,
+        source: null,
       },
-      accuracy: "high",
-      source: "MaxMind",
+      accuracy: "low",
+      source: "Local",
       ipVersion: ipVersion as "IPv4" | "IPv6",
       isp: "私有网络",
-      timezone: "UTC",
     };
   }
 
@@ -139,7 +126,6 @@ export class GeoIPService {
   destroy(): void {
     geoIPReader.destroy();
     globalIPCache.clear();
-    this.initialized = false;
   }
 }
 

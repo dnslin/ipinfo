@@ -38,7 +38,7 @@ export interface IPInfo {
   timezone?: string;
   postal?: string;
   accuracy: "high" | "medium" | "low";
-  source: "MaxMind" | "GeoCN" | "MeiTuan";
+  source: "MaxMind" | "GeoCN" | "MeiTuan" | "Local";
   ipVersion: "IPv4" | "IPv6";
   // 代理检测信息
   proxyDetection?: ProxyDetectionResult;
