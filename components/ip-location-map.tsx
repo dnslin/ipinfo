@@ -1,407 +1,146 @@
 "use client";
 
-import React, { useMemo, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
-import { LatLngTuple, Icon } from "leaflet";
-import { MapPin, Globe, Copy, CheckCircle, ZoomIn, Shield } from "lucide-react";
-import { IPInfo } from "@/lib/store";
+import { Icon, type LatLngTuple } from "leaflet";
+import { MapPin, Globe, Copy, CheckCircle, Shield, LocateFixed } from "lucide-react";
+import type { IPInfo } from "@/lib/store";
+import { checkPrivateIP } from "@/lib/ip-detection";
+import { useTheme } from "@/lib/theme";
+import { validateCoordinates, getZoomByAccuracy, MAP_TILE_PROVIDERS } from "@/lib/geoip/map-types";
 
-// 定义Leaflet地图元素的类型
-interface LeafletMapElement extends HTMLElement {
-  _leaflet_map?: {
-    setView: (center: LatLngTuple, zoom: number, options?: { animate: boolean; duration: number }) => void;
-  };
-}
-import { useState, useEffect, useRef } from "react";
-import {
-  validateCoordinates,
-  getZoomByAccuracy,
-  MAP_TILE_PROVIDERS,
-  type MapTheme,
-} from "@/lib/geoip/map-types";
-
-// 修复 Leaflet 默认图标问题 - CSS已在layout中全局导入
-
-// 自定义地图标记图标
-const createCustomIcon = (isDark: boolean) => {
-  return new Icon({
-    iconUrl: `data:image/svg+xml;base64,${btoa(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${
-        isDark ? "#ef4444" : "#dc2626"
-      }" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-        <circle cx="12" cy="10" r="3"/>
-      </svg>
-    `)}`,
-    shadowUrl: "",
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-  });
-};
-
-// 地图视图更新组件
-interface MapViewUpdaterProps {
-  center: LatLngTuple;
-  zoom: number;
-}
-
-const MapViewUpdater: React.FC<MapViewUpdaterProps> = ({ center, zoom }) => {
+function MapView({ center, zoom }: { center: LatLngTuple; zoom: number }) {
   const map = useMap();
-  const prevCenterRef = useRef<LatLngTuple | null>(null);
 
   useEffect(() => {
-    const [newLat, newLng] = center;
-    const prevCenter = prevCenterRef.current;
+    map.setView(center, zoom);
+  }, [map, center, zoom]);
 
-    // 检查坐标是否真的发生了变化（避免不必要的更新）
-    if (prevCenter) {
-      const [prevLat, prevLng] = prevCenter;
-      const latDiff = Math.abs(newLat - prevLat);
-      const lngDiff = Math.abs(newLng - prevLng);
-
-      // 如果坐标变化很小（小于0.001度，约100米），则不更新
-      if (latDiff < 0.001 && lngDiff < 0.001) {
-        return;
-      }
-    }
-
-    // 平滑移动到新位置
-    map.setView(center, zoom, {
-      animate: true,
-      duration: 1.5, // 1.5秒的平滑动画
-      easeLinearity: 0.25,
-    });
-
-    // 更新上一次的坐标
-    prevCenterRef.current = center;
-  }, [center, zoom, map]);
-
-  return null;
-};
-
-interface IPLocationMapProps {
-  ipData: IPInfo;
-  className?: string;
+  return (
+    <button
+      type="button"
+      aria-label="重新定位到查询位置"
+      title="重新定位到查询位置"
+      className="absolute right-3 bottom-8 z-[1000] rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-2 text-[rgb(var(--color-text-secondary))] shadow-sm"
+      onClick={(event) => {
+        event.stopPropagation();
+        map.setView(center, zoom, { animate: true });
+      }}
+    >
+      <LocateFixed className="h-4 w-4" />
+    </button>
+  );
 }
 
-export default function IPLocationMap({
-  ipData,
-  className = "",
-}: IPLocationMapProps) {
+function createMarker(isDark: boolean) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" stroke="${isDark ? "#ef4444" : "#dc2626"}" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
+  return new Icon({
+    iconUrl: `data:image/svg+xml,${encodeURIComponent(svg)}`,
+    iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -32],
+  });
+}
+
+export default function IPLocationMap({ ipData, className = "" }: { ipData: IPInfo; className?: string }) {
+  const { resolvedTheme } = useTheme();
   const [copied, setCopied] = useState(false);
-  const [isDark, setIsDark] = useState(false);
+  const [tileError, setTileError] = useState(false);
+  const [tileAttempt, setTileAttempt] = useState(0);
+  const { latitude, longitude, accuracy_radius, source } = ipData.location;
+  const isPrivate = checkPrivateIP(ipData.ip).isPrivate;
+  const center = useMemo<LatLngTuple | null>(() => {
+    if (latitude === null || longitude === null || !validateCoordinates(latitude, longitude).isValid) return null;
+    return [latitude, longitude];
+  }, [latitude, longitude]);
+  const icon = useMemo(() => createMarker(resolvedTheme === "dark"), [resolvedTheme]);
+  const zoom = getZoomByAccuracy(ipData.accuracy, accuracy_radius);
+  const provider = MAP_TILE_PROVIDERS[resolvedTheme];
+  const location = [ipData.country, ipData.province, ipData.city, ipData.district].filter(Boolean).join(" · ");
+  const accuracy = accuracy_radius !== undefined ? `精度半径: ~${accuracy_radius}km` : "坐标精度未提供";
 
-  // 检测深色主题
   useEffect(() => {
-    const checkTheme = () => {
-      const isDarkMode = document.documentElement.classList.contains("dark");
-      setIsDark(isDarkMode);
-    };
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
-    checkTheme();
-    const observer = new MutationObserver(checkTheme);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
-  // 检查坐标有效性
-  const coordinateValidation = useMemo(() => {
-    const { latitude, longitude } = ipData.location;
-    return validateCoordinates(latitude, longitude);
-  }, [ipData.location]);
-
-  const isValidCoordinates = coordinateValidation.isValid;
-
-  // 检查是否为私有IP
-  const isPrivateIP = useMemo(() => {
-    const ip = ipData.ip;
-    const privateIPv4Ranges = [
-      /^10\./,
-      /^192\.168\./,
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-      /^127\./,
-      /^169\.254\./,
-      /^0\.0\.0\.0$/,
-      /^255\.255\.255\.255$/,
-    ];
-
-    const privateIPv6Ranges = [
-      /^::1$/,
-      /^fc[0-9a-f]{2}:/i,
-      /^fd[0-9a-f]{2}:/i,
-      /^fe80:/i,
-    ];
-
-    return (
-      privateIPv4Ranges.some((range) => range.test(ip)) ||
-      privateIPv6Ranges.some((range) => range.test(ip))
-    );
-  }, [ipData.ip]);
-
-  // 计算地图缩放级别
-  const zoomLevel = useMemo(() => {
-    return getZoomByAccuracy(ipData.accuracy, ipData.location.accuracy_radius);
-  }, [ipData.accuracy, ipData.location.accuracy_radius]);
-
-  // 地图中心点
-  const mapCenter: LatLngTuple = useMemo(
-    () => [ipData.location.latitude, ipData.location.longitude],
-    [ipData.location]
-  );
-
-  // 地图瓦片配置
-  const tileProvider = useMemo(() => {
-    const theme: MapTheme = isDark ? "dark" : "light";
-    return MAP_TILE_PROVIDERS[theme];
-  }, [isDark]);
-
-  // 复制坐标
-  const copyCoordinates = useCallback(async () => {
+  const copyCoordinates = async () => {
+    if (!center) return;
     try {
-      const coordsText = `${ipData.location.latitude.toFixed(
-        6
-      )}, ${ipData.location.longitude.toFixed(6)}`;
-      await navigator.clipboard.writeText(coordsText);
+      await navigator.clipboard.writeText(`${center[0].toFixed(6)}, ${center[1].toFixed(6)}`);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("复制坐标失败:", err);
+    } catch (error) {
+      console.error("复制坐标失败:", error);
     }
-  }, [ipData.location]);
+  };
 
-  // 格式化位置信息
-  const formatLocation = useCallback(() => {
-    const parts = [];
-    if (ipData.country) parts.push(ipData.country);
-    if (ipData.province) parts.push(ipData.province);
-    if (ipData.city) parts.push(ipData.city);
-    if (ipData.district) parts.push(ipData.district);
-    return parts.join(" · ");
-  }, [ipData]);
-
-  // 获取精度文本
-  const getAccuracyText = useCallback(() => {
-    const { accuracy_radius } = ipData.location;
-    if (accuracy_radius) {
-      return `精度半径: ~${accuracy_radius}km`;
-    }
-    return ipData.accuracy === "high"
-      ? "高精度"
-      : ipData.accuracy === "medium"
-      ? "中等精度"
-      : "低精度";
-  }, [ipData.location, ipData.accuracy]);
-
-  // 无效坐标或私有IP的占位符组件
-  if (!isValidCoordinates || isPrivateIP) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className={`bg-[rgb(var(--color-glass-background))] backdrop-blur-sm rounded-2xl shadow-lg border border-[rgb(var(--color-border))] overflow-hidden transition-colors duration-300 ${className}`}
-      >
-        {/* 简化头部信息 */}
-        <div className="px-6 py-4 border-b border-[rgb(var(--color-border))] transition-colors duration-300">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-[rgb(var(--color-surface-hover))] transition-colors duration-300">
-              <MapPin className="w-5 h-5 text-gray-500" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-[rgb(var(--color-text-primary))]">
-                地理位置
-              </h3>
-              <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-                {formatLocation()}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* 占位符内容 */}
-        <div className="flex items-center justify-center h-64 bg-gradient-to-br from-[rgb(var(--color-background-secondary))] to-[rgb(var(--color-surface-hover))] transition-colors duration-300">
-          {/* 装饰性网格背景 */}
-          <div className="absolute inset-0 opacity-20 dark:opacity-10">
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage: `radial-gradient(circle at 1px 1px, rgb(var(--color-text-muted)) 1px, transparent 0)`,
-                backgroundSize: "20px 20px",
-              }}
-            />
-          </div>
-
-          <div className="text-center relative z-10">
-            <motion.div
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              transition={{
-                type: "spring",
-                stiffness: 200,
-                damping: 20,
-                delay: 0.3,
-              }}
-              className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg transition-colors duration-300"
-            >
-              {isPrivateIP ? (
-                <Shield className="w-10 h-10 text-gray-600 dark:text-gray-400" />
-              ) : (
-                <Globe className="w-10 h-10 text-gray-500 dark:text-gray-400" />
-              )}
-            </motion.div>
-            <p className="text-[rgb(var(--color-text-secondary))] font-medium mb-2">
-              {isPrivateIP ? "私有网络地址" : "位置信息不可用"}
-            </p>
-            <div className="inline-flex items-center space-x-2 bg-[rgb(var(--color-surface))]/80 px-3 py-1.5 rounded-full text-sm text-[rgb(var(--color-text-muted))] transition-colors duration-300">
-              <MapPin className="w-4 h-4" />
-              <span>{isPrivateIP ? "本地网络" : "无有效坐标"}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 底部信息 */}
-        <div className="px-6 py-3 bg-[rgb(var(--color-surface))] transition-colors duration-300">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-[rgb(var(--color-text-muted))]">
-              数据来源: {ipData.source}
-            </span>
-            <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 transition-colors duration-300">
-              {isPrivateIP ? "本地网络" : "未知位置"}
-            </span>
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
-
-  // 有效坐标的地图组件
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className={`bg-[rgb(var(--color-glass-background))] backdrop-blur-sm rounded-2xl shadow-lg border border-[rgb(var(--color-border))] overflow-hidden transition-colors duration-300 ${className}`}
+      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+      className={`overflow-hidden rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-glass-background))] shadow-lg ${className}`}
     >
-      {/* 地图头部信息 */}
-      <div className="px-4 md:px-6 py-3 md:py-4 border-b border-[rgb(var(--color-border))] transition-colors duration-300">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center space-x-3 min-w-0">
-            <div className="p-2 rounded-xl bg-[rgb(var(--color-surface-hover))] transition-colors duration-300">
-              <MapPin className="w-5 h-5 text-green-500" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-[rgb(var(--color-text-primary))]">
-                地理位置
-              </h3>
-              <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-                {formatLocation()}
-              </p>
-            </div>
+      <div className="flex flex-col justify-between gap-3 border-b border-[rgb(var(--color-border))] px-4 py-3 md:flex-row md:items-center md:px-6 md:py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <MapPin className="h-5 w-5 shrink-0 text-green-500" />
+          <div>
+            <h3 className="font-semibold text-[rgb(var(--color-text-primary))]">地理位置</h3>
+            <p className="text-sm text-[rgb(var(--color-text-secondary))]">{location || "地区信息未提供"}</p>
           </div>
-
-          <button
-            onClick={copyCoordinates}
-            className="flex items-center space-x-2 px-3 py-2 md:py-1.5 rounded-lg hover:bg-[rgb(var(--color-surface-hover))] transition-colors duration-200 group min-h-[44px] md:min-h-auto flex-shrink-0"
-          >
-            {copied ? (
-              <CheckCircle className="w-4 h-4 text-green-500" />
-            ) : (
-              <Copy className="w-4 h-4 text-[rgb(var(--color-text-muted))] group-hover:text-[rgb(var(--color-text-secondary))]" />
-            )}
-            <span className="text-sm text-[rgb(var(--color-text-secondary))] font-mono">
-              {ipData.location.latitude.toFixed(4)}°,{" "}
-              {ipData.location.longitude.toFixed(4)}°
-            </span>
+        </div>
+        {center && !isPrivate && (
+          <button type="button" onClick={copyCoordinates} title="复制坐标" className="flex items-center gap-2 self-start rounded-lg px-2 py-1.5 text-sm text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))]">
+            {copied ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+            <span className="font-mono">{center[0].toFixed(4)}°, {center[1].toFixed(4)}°</span>
           </button>
-        </div>
+        )}
       </div>
 
-      {/* 地图容器 */}
-      <div className="relative h-48 md:h-64 bg-gray-100 dark:bg-gray-800 transition-colors duration-300">
-        <MapContainer
-          center={mapCenter}
-          zoom={zoomLevel}
-          style={{ height: "100%", width: "100%" }}
-          zoomControl={false}
-          attributionControl={false}
-          className="z-0"
-        >
-          <TileLayer
-            url={tileProvider.url}
-            attribution={tileProvider.attribution}
-            maxZoom={tileProvider.maxZoom}
-          />
-
-          {/* 地图视图更新组件 */}
-          <MapViewUpdater center={mapCenter} zoom={zoomLevel} />
-
-          <Marker position={mapCenter} icon={createCustomIcon(isDark)}>
-            <Popup className="custom-popup">
-              <div className="p-2 min-w-[200px]">
-                <div className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                  {formatLocation()}
-                </div>
-                <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                  <div>纬度: {ipData.location.latitude.toFixed(6)}°</div>
-                  <div>经度: {ipData.location.longitude.toFixed(6)}°</div>
-                  <div>{getAccuracyText()}</div>
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-        </MapContainer>
-
-        {/* 缩放控制按钮 */}
-        <div className="absolute top-4 right-4 z-10">
-          <button
-            className="p-2 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-lg hover:bg-white dark:hover:bg-gray-800 transition-colors duration-200"
-            onClick={() => {
-              // 触发地图重新定位到标记点并放大
-              const mapElement = document.querySelector(
-                ".leaflet-container"
-              ) as LeafletMapElement;
-              if (mapElement && mapElement._leaflet_map) {
-                const map = mapElement._leaflet_map;
-                map.setView(mapCenter, Math.min(zoomLevel + 2, 18), {
-                  animate: true,
-                  duration: 1.0,
-                });
-              }
-            }}
-          >
-            <ZoomIn className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-          </button>
+      {center && !isPrivate ? (
+        <>
+          <div className="relative h-64 bg-[rgb(var(--color-surface-hover))] md:h-72">
+            <MapContainer center={center} zoom={zoom} style={{ height: "100%", width: "100%" }} zoomControl attributionControl scrollWheelZoom={false} maxZoom={provider.maxZoom}>
+              <TileLayer
+                key={`${provider.url}-${tileAttempt}`}
+                url={provider.url} attribution={provider.attribution} maxZoom={provider.maxZoom}
+                className="ip-map-tiles"
+                eventHandlers={{ loading: () => setTileError(false), tileerror: () => setTileError(true) }}
+              />
+              <MapView center={center} zoom={zoom} />
+              <Marker position={center} icon={icon}>
+                <Popup className="custom-popup">
+                  <div className="p-3 text-sm">
+                    <p className="mb-2 font-semibold">{location || ipData.ip}</p>
+                    <p>纬度: {center[0].toFixed(6)}°</p>
+                    <p>经度: {center[1].toFixed(6)}°</p>
+                    <p>{accuracy}</p>
+                  </div>
+                </Popup>
+              </Marker>
+            </MapContainer>
+          </div>
+          {tileError && (
+            <div role="status" className="flex items-center justify-between gap-3 border-t border-[rgb(var(--color-border))] px-4 py-3 text-sm text-[rgb(var(--color-text-secondary))]">
+              <span>底图加载失败，坐标信息仍可查看。</span>
+              <button type="button" className="shrink-0 text-blue-600 dark:text-blue-400" onClick={() => { setTileError(false); setTileAttempt((attempt) => attempt + 1); }}>重试底图</button>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="flex h-48 flex-col items-center justify-center gap-3 bg-[rgb(var(--color-surface-hover))] text-[rgb(var(--color-text-secondary))]">
+          {isPrivate ? <Shield className="h-10 w-10" /> : <Globe className="h-10 w-10" />}
+          <p>{isPrivate ? "本地网络地址没有公网地理位置" : "此 IP 的数据库记录未提供有效坐标"}</p>
         </div>
-      </div>
+      )}
 
-      {/* 地图底部信息 */}
-      <div className="px-4 md:px-6 py-3 bg-[rgb(var(--color-surface))] transition-colors duration-300">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-[rgb(var(--color-text-muted))]">
-            数据来源: {ipData.source}
-          </span>
-          <span
-            className={`
-            px-2 py-1 rounded-full text-xs font-medium transition-colors duration-300
-            ${
-              ipData.accuracy === "high"
-                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                : ipData.accuracy === "medium"
-                ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
-                : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-            }
-          `}
-          >
-            {getAccuracyText()}
-          </span>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-[rgb(var(--color-surface))] px-4 py-3 text-xs text-[rgb(var(--color-text-secondary))] md:px-6">
+        <span>地区: {ipData.source === "Local" ? "本地地址分类" : ipData.source} · 坐标: {source ?? "未提供"}</span>
+        <span>{center && !isPrivate ? accuracy : "无坐标"}</span>
       </div>
+      {center && ipData.source === "GeoCN" && source === "MaxMind" && (
+        <p className="border-t border-[rgb(var(--color-border))] px-4 py-2 text-xs text-[rgb(var(--color-text-secondary))] md:px-6">
+          地区与坐标来自不同数据库，地图按 MaxMind 估算坐标展示。
+        </p>
+      )}
     </motion.div>
   );
 }

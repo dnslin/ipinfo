@@ -474,9 +474,14 @@ html.dark {
   @apply bg-white dark:bg-gray-800;
 }
 
-/* 地图容器适配暗色主题 */
-.dark .leaflet-container {
-  filter: brightness(0.9) contrast(1.1);
+/* 只调整底图颜色，标记、弹窗和署名保留各自的主题样式。 */
+.dark .ip-map-tiles {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.85);
+}
+
+.leaflet-control-attribution {
+  background: rgb(var(--color-surface)) !important;
+  color: rgb(var(--color-text-secondary));
 }
 
 /* 地图标记动画 */

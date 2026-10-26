@@ -1,7 +1,7 @@
 // 地图组件专用类型定义
 
-import { LatLngTuple } from "leaflet";
-import { IPInfo } from "../store";
+import type { LatLngTuple } from "leaflet";
+import type { IPInfo } from "../store";
 
 // 地图主题类型
 export type MapTheme = "light" | "dark" | "auto";
@@ -14,26 +14,18 @@ export interface TileProvider {
   maxZoom: number;
 }
 
-// 地图瓦片配置
+// 浏览器直接请求底图，保留 Referer、HTTP 缓存与可见署名。
+const openStreetMap: TileProvider = {
+  name: "OpenStreetMap",
+  url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  maxZoom: 19,
+};
+
 export const MAP_TILE_PROVIDERS: Record<MapTheme, TileProvider> = {
-  light: {
-    name: "CartoDB Positron",
-    url: "https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png",
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
-    maxZoom: 18,
-  },
-  dark: {
-    name: "CartoDB Dark Matter",
-    url: "https://cartodb-basemaps-{s}.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
-    maxZoom: 18,
-  },
-  auto: {
-    name: "CartoDB Positron",
-    url: "https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png",
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
-    maxZoom: 18,
-  },
+  light: openStreetMap,
+  dark: openStreetMap,
+  auto: openStreetMap,
 };
 
 // 地图配置选项
@@ -103,9 +95,12 @@ export interface CoordinateValidation {
 }
 
 export function validateCoordinates(
-  lat: number,
-  lng: number
+  lat: number | null,
+  lng: number | null
 ): CoordinateValidation {
+  if (lat === null || lng === null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { isValid: false, reason: "未提供有效坐标" };
+  }
   // 检查基本范围
   if (lat < -90 || lat > 90) {
     return { isValid: false, reason: "纬度超出有效范围 (-90, 90)" };
@@ -113,11 +108,6 @@ export function validateCoordinates(
 
   if (lng < -180 || lng > 180) {
     return { isValid: false, reason: "经度超出有效范围 (-180, 180)" };
-  }
-
-  // 检查是否为零坐标（通常表示无效位置）
-  if (lat === 0 && lng === 0) {
-    return { isValid: false, reason: "坐标为原点，可能是无效位置" };
   }
 
   return { isValid: true };
