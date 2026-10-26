@@ -41,30 +41,19 @@ const SafeCountryFlag = ({
 
 export default function IPQueryForm() {
   const [inputValue, setInputValue] = useState("");
-  const [validationError, setValidationError] = useState("");
   const [hoveredButton, setHoveredButton] = useState<number | null>(null);
 
   const { setQuery, executeQuery, isLoading, error, clearError } =
     useIPQueryStore();
 
-  // 动态占位符文本
-  const placeholders = [
-    "输入IP地址查询地理位置...",
-    "例如: 8.8.8.8 (IPv4)",
-    "例如: 2001:4860:4860::8888 (IPv6)",
-    "留空查询您当前的IP地址",
-    "支持IPv4和IPv6地址格式",
-    "输入任意有效的IP地址",
-  ];
-
   const handleInputChange = (value: string) => {
     setInputValue(value);
-    setValidationError("");
     clearError();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
 
     const trimmedValue = inputValue.trim();
 
@@ -108,7 +97,6 @@ export default function IPQueryForm() {
   const handleQueryMyIP = async () => {
     // 清空输入框并清除错误状态
     setInputValue("");
-    setValidationError("");
     clearError();
 
     // 设置查询为空字符串并执行查询
@@ -124,14 +112,14 @@ export default function IPQueryForm() {
       transition={{ duration: 0.4 }}
       className="w-full max-w-3xl mx-auto px-2 md:px-0"
     >
-      {/* 新的输入框 - 使用Placeholders And Vanish Input */}
+      {/* 查询输入框 */}
       <div className="relative">
         <PlaceholdersAndVanishInput
-          placeholders={placeholders}
+          placeholder="输入 IPv4 / IPv6 地址，留空查询我的 IP"
           onChange={handleInputChangeForVanishInput}
           onSubmit={handleSubmit}
           value={inputValue}
-          onVanishComplete={() => setInputValue("")}
+          disabled={isLoading}
         />
 
         {/* 加载状态覆盖层 */}
@@ -150,13 +138,13 @@ export default function IPQueryForm() {
         )}
 
         {/* 错误提示 */}
-        {(validationError || error) && (
+        {error && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             className="mt-3 text-red-500 dark:text-red-400 text-sm font-medium transition-colors duration-300"
           >
-            {validationError || error}
+            {error}
           </motion.div>
         )}
       </div>
@@ -193,6 +181,7 @@ export default function IPQueryForm() {
           </AnimatePresence>
           <motion.button
             onClick={handleQueryMyIP}
+            disabled={isLoading}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             className="relative z-10 flex items-center space-x-1.5 md:space-x-2 px-3 md:px-4 py-2 md:py-2.5 text-xs md:text-sm bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-full transition-all duration-200 border border-[rgb(var(--color-border))] min-h-[44px] md:min-h-auto"

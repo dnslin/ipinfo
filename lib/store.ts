@@ -30,9 +30,10 @@ export interface IPInfo {
     name: string;
   };
   location: {
-    latitude: number;
-    longitude: number;
+    latitude: number | null;
+    longitude: number | null;
     accuracy_radius?: number;
+    source: "MaxMind" | "MeiTuan" | null;
   };
   timezone?: string;
   postal?: string;
@@ -78,6 +79,8 @@ interface IPQueryState {
   clearHistory: () => void;
 }
 
+let queryController: AbortController | null = null;
+
 // 创建store
 export const useIPQueryStore = create<IPQueryState>((set, get) => ({
   // 初始状态
@@ -94,6 +97,10 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
 
   // 执行IP查询
   executeQuery: async (ip?: string) => {
+    queryController?.abort();
+    const controller = new AbortController();
+    queryController = controller;
+
     // 开始查询时清除之前的状态
     set({
       isLoading: true,
@@ -102,26 +109,28 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
     });
 
     try {
-      const queryIP = ip || get().currentQuery;
+      const queryIP = ip?.trim();
       const response = await fetch("/api/query", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ ip: queryIP || undefined }), // 发送undefined而不是空字符串
+        signal: controller.signal,
       });
 
       if (!response.ok) {
-        throw new Error(`查询失败: ${response.statusText}`);
+        const result: { error?: string } = await response.json();
+        throw new Error(result.error || `查询失败: ${response.status} ${response.statusText}`);
       }
 
       const result: IPInfo = await response.json();
+      if (controller.signal.aborted) return;
 
       set({
         ipData: result,
-        isLoading: false,
         error: null, // 确保清除错误状态
-        isAutoDetected: !ip,
+        isAutoDetected: !queryIP,
         currentQuery: result.ip,
       });
 
@@ -136,11 +145,11 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
       // 添加到历史记录
       get().addToHistory(result);
     } catch (error) {
+      if (controller.signal.aborted) return;
       const errorMessage = error instanceof Error ? error.message : "查询失败";
 
       set({
         error: errorMessage,
-        isLoading: false,
         ipData: null, // 确保清除IP数据
       });
 
@@ -149,11 +158,18 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
         description: errorMessage,
         duration: 2000,
       });
+    } finally {
+      if (!controller.signal.aborted) {
+        queryController = null;
+        set({ isLoading: false });
+      }
     }
   },
 
   // 执行代理检测
   executeProxyDetection: async () => {
+    const queryData = get().ipData;
+    if (!queryData || get().isProxyDetecting) return;
     set({ isProxyDetecting: true });
 
     try {
@@ -179,7 +195,7 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
 
       // 更新当前IP数据，添加代理检测信息
       const currentData = get().ipData;
-      if (currentData) {
+      if (currentData === queryData) {
         const updatedData: IPInfo = {
           ...currentData,
           proxyDetection: proxyResult,
@@ -187,7 +203,6 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
 
         set({
           ipData: updatedData,
-          isProxyDetecting: false,
         });
 
         // 显示检测结果提示
@@ -208,13 +223,14 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
       }
     } catch (error) {
       console.error("代理检测失败:", error);
-      set({ isProxyDetecting: false });
 
       toast.error("代理检测失败", {
         description:
           error instanceof Error ? error.message : "无法完成代理检测",
         duration: 4000,
       });
+    } finally {
+      set({ isProxyDetecting: false });
     }
   },
 
