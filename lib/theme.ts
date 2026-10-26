@@ -38,6 +38,7 @@ const subscribeToTheme = (onChange: () => void) => {
   const onStorage = (event: StorageEvent) => {
     if (event.key !== "theme" && event.key !== null) return;
     currentTheme = getStoredTheme();
+    applyTheme(currentTheme === "system" ? getSystemTheme() : currentTheme);
     onChange();
   };
   window.addEventListener(themeChangeEvent, onChange);
@@ -50,16 +51,27 @@ const subscribeToTheme = (onChange: () => void) => {
 
 const subscribeToSystemTheme = (onChange: () => void) => {
   const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-  mediaQuery.addEventListener("change", onChange);
-  return () => mediaQuery.removeEventListener("change", onChange);
+  const onSystemChange = () => {
+    if (getThemeSnapshot() === "system") applyTheme(getSystemTheme());
+    onChange();
+  };
+  mediaQuery.addEventListener("change", onSystemChange);
+  return () => mediaQuery.removeEventListener("change", onSystemChange);
 };
 
 const applyTheme = (resolvedTheme: "light" | "dark") => {
-  document.documentElement.classList.toggle("light", resolvedTheme === "light");
-  document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
+  const root = document.documentElement;
+  if (root.classList.contains(resolvedTheme) && root.style.colorScheme === resolvedTheme) return;
+  root.classList.add("theme-changing");
+  root.classList.toggle("light", resolvedTheme === "light");
+  root.classList.toggle("dark", resolvedTheme === "dark");
+  root.style.colorScheme = resolvedTheme;
+  // 先结算新颜色，再恢复元素自身的交互过渡，避免换肤时叠加颜色渐变。
+  root.getBoundingClientRect();
+  root.classList.remove("theme-changing");
 };
 
-const setTheme = (theme: Theme) => {
+export const setTheme = (theme: Theme) => {
   currentTheme = theme;
   try {
     localStorage.setItem("theme", theme);
@@ -68,6 +80,12 @@ const setTheme = (theme: Theme) => {
   }
   applyTheme(theme === "system" ? getSystemTheme() : theme);
   window.dispatchEvent(new Event(themeChangeEvent));
+};
+
+export const toggleTheme = () => {
+  const theme = getThemeSnapshot();
+  const resolvedTheme = theme === "system" ? getSystemTheme() : theme;
+  setTheme(resolvedTheme === "light" ? "dark" : "light");
 };
 
 export const useTheme = (): ThemeContextValue => {
@@ -84,8 +102,6 @@ export const useTheme = (): ThemeContextValue => {
     theme,
     resolvedTheme,
     setTheme,
-    toggleTheme: () => setTheme(resolvedTheme === "light" ? "dark" : "light"),
+    toggleTheme,
   };
 };
-
-export const themeTransition = "transition-colors duration-300 ease-in-out";

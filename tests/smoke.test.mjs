@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { resolve } from "node:path";
 import { after, before, test } from "node:test";
+import { runInNewContext } from "node:vm";
 
 let server;
 let baseURL;
@@ -69,6 +70,26 @@ test("database status can be read without starting downloads", async () => {
   assert.equal(body.success, true);
   assert.equal(typeof body.data.isReady, "boolean");
   assert.ok(Array.isArray(body.data.databases));
+});
+
+test("first-paint theme follows the system even when browser storage is unavailable", async () => {
+  const html = await (await request("/")).text();
+  const bootstrap = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
+    .find((match) => match[1].includes("localStorage") && match[1].includes("matchMedia"))?.[1];
+  assert.ok(bootstrap, "homepage contains its first-paint theme bootstrap");
+  const classes = new Set();
+  const root = { style: {}, classList: {
+    add(name) { classes.add(name); }, remove(name) { classes.delete(name); },
+    toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); },
+  } };
+  runInNewContext(bootstrap, {
+    localStorage: { get theme() { throw new Error("storage is unavailable"); }, getItem() { throw new Error("storage is unavailable"); } },
+    window: { matchMedia: () => ({ matches: true }) },
+    document: { documentElement: root },
+  });
+  assert.equal(classes.has("dark"), true);
+  assert.equal(classes.has("light"), false);
+  assert.equal(root.style.colorScheme, "dark");
 });
 
 test("IPv4 and IPv6 subdomains preserve forced version rewrites", async () => {

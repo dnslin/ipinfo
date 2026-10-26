@@ -1,494 +1,192 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
-/* 启用暗色模式类名策略 */
-@variant dark (.dark &);
-
-/* CSS变量定义 */
 :root {
-  /* 字体系列 */
-  --font-inter: "Inter", "SF Pro Display", system-ui, -apple-system, sans-serif;
-  --font-jetbrains-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", monospace;
-
-  /* 基础颜色系统 */
-  --color-primary: 59 130 246; /* blue-500 */
-  --color-secondary: 147 51 234; /* purple-500 */
-  --color-success: 34 197 94; /* green-500 */
-  --color-warning: 245 158 11; /* amber-500 */
-  --color-error: 239 68 68; /* red-500 */
-
-  /* 动画持续时间变量 */
-  --animation-duration-xs: 100ms;
-  --animation-duration-sm: 200ms;
-  --animation-duration-md: 300ms;
-  --animation-duration-lg: 500ms;
-  --animation-duration-xl: 800ms;
-
-  /* 过渡缓动函数 */
-  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
-  --ease-in-expo: cubic-bezier(0.95, 0.05, 0.795, 0.035);
-  --ease-in-out-expo: cubic-bezier(0.87, 0, 0.13, 1);
-  --ease-custom: cubic-bezier(0.22, 1, 0.36, 1);
-
-  /* 浅色主题语义化颜色 */
-  --color-background: 255 255 255; /* white */
-  --color-background-secondary: 248 250 252; /* slate-50 */
-  --color-surface: 255 255 255; /* white */
-  --color-surface-hover: 248 250 252; /* slate-50 */
-  --color-border: 226 232 240; /* slate-200 */
-  --color-border-light: 241 245 249; /* slate-100 */
-  --color-text-primary: 15 23 42; /* slate-900 */
-  --color-text-secondary: 71 85 105; /* slate-600 */
-  --color-text-muted: 148 163 184; /* slate-400 */
-  --color-text-inverse: 255 255 255; /* white */
-
-  /* 卡片和表面 */
-  --color-card-background: 255 255 255; /* white */
-  --color-card-border: 226 232 240; /* slate-200 */
-  --color-glass-background: 255 255 255 / 0.9;
-  --color-glass-border: 255 255 255 / 0.2;
-
-  /* 交互状态 */
-  --color-hover-background: 248 250 252; /* slate-50 */
-  --color-active-background: 241 245 249; /* slate-100 */
-  --color-focus-ring: 59 130 246; /* blue-500 */
-
-  /* 渐变背景 */
-  --gradient-background: linear-gradient(
-    135deg,
-    rgb(239 246 255),
-    rgb(255 255 255),
-    rgb(250 245 255)
-  );
-  --gradient-card: linear-gradient(
-    135deg,
-    rgb(255 255 255 / 0.9),
-    rgb(248 250 252 / 0.9)
-  );
-
-  /* 间距系统 */
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
-  --spacing-2xl: 3rem;
-
-  /* 圆角系统 */
-  --radius-sm: 0.5rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1.5rem;
-  --radius-2xl: 2rem;
-
-  /* 阴影系统 */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1),
-    0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1),
-    0 8px 10px -6px rgb(0 0 0 / 0.1);
-}
-
-/* 暗色主题 */
-.dark {
-  /* 暗色主题语义化颜色 */
-  --color-background: 2 6 23; /* slate-950 */
-  --color-background-secondary: 15 23 42; /* slate-900 */
-  --color-surface: 15 23 42; /* slate-900 */
-  --color-surface-hover: 30 41 59; /* slate-800 */
-  --color-border: 51 65 85; /* slate-700 */
-  --color-border-light: 71 85 105; /* slate-600 */
-  --color-text-primary: 248 250 252; /* slate-50 */
-  --color-text-secondary: 203 213 225; /* slate-300 */
-  --color-text-muted: 148 163 184; /* slate-400 */
-  --color-text-inverse: 15 23 42; /* slate-900 */
-
-  /* 卡片和表面 */
-  --color-card-background: 15 23 42; /* slate-900 */
-  --color-card-border: 51 65 85; /* slate-700 */
-  --color-glass-background: 15 23 42 / 0.9;
-  --color-glass-border: 71 85 105 / 0.3;
-
-  /* 交互状态 */
-  --color-hover-background: 30 41 59; /* slate-800 */
-  --color-active-background: 51 65 85; /* slate-700 */
-  --color-focus-ring: 59 130 246; /* blue-500 */
-
-  /* 渐变背景 */
-  --gradient-background: linear-gradient(
-    135deg,
-    rgb(2 6 23),
-    rgb(15 23 42),
-    rgb(30 41 59)
-  );
-  --gradient-card: linear-gradient(
-    135deg,
-    rgb(15 23 42 / 0.9),
-    rgb(30 41 59 / 0.9)
-  );
-
-  /* 暗色模式阴影 */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4),
-    0 4px 6px -4px rgb(0 0 0 / 0.4);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5),
-    0 8px 10px -6px rgb(0 0 0 / 0.5);
-}
-
-/* 基础样式重置 */
-* {
-  box-sizing: border-box;
-}
-
-html {
-  scroll-behavior: smooth;
-  -webkit-text-size-adjust: 100%;
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE/Edge */
-}
-
-body {
-  font-family: var(--font-inter);
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* 字体类工具 */
-.font-mono {
-  font-family: var(--font-jetbrains-mono);
-}
-
-.font-sans {
-  font-family: var(--font-inter);
-}
-
-/* IP显示专用样式 */
-.ip-display {
-  font-family: var(--font-jetbrains-mono);
-  font-size: 2.5rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
-
-.location-primary {
-  font-family: var(--font-inter);
-  font-size: 1.25rem;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.metadata {
-  font-family: var(--font-inter);
-  font-size: 0.875rem;
-  font-weight: 400;
-  color: rgb(107 114 128); /* gray-500 */
-}
-
-/* 自定义动画 */
-@keyframes pulse-border {
-  0%,
-  100% {
-    border-color: rgb(59 130 246 / 0.3);
-  }
-  50% {
-    border-color: rgb(59 130 246 / 0.8);
-  }
-}
-
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes scale-in {
-  from {
-    opacity: 0;
-    transform: scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* 自定义工具类 */
-.animate-pulse-border {
-  animation: pulse-border 2s ease-in-out infinite;
-}
-
-.animate-fade-in-up {
-  animation: fade-in-up 0.6s ease-out;
-}
-
-.animate-scale-in {
-  animation: scale-in 0.4s ease-out;
-}
-
-/* 玻璃效果 */
-.glass {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.glass-dark {
-  background: rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* 渐变文本 */
-.gradient-text {
-  background: linear-gradient(135deg, rgb(59 130 246), rgb(147 51 234));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* 选中状态优化 */
-::selection {
-  background-color: rgb(59 130 246 / 0.3);
-  color: rgb(30 41 59);
-}
-
-::-moz-selection {
-  background-color: rgb(59 130 246 / 0.3);
-  color: rgb(30 41 59);
-}
-
-/* 滚动条样式 */
-::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none; /* WebKit浏览器 */
-}
-
-/* 焦点样式优化 */
-.focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-white;
-}
-
-/* 交互状态 */
-.interactive {
-  @apply transition-all duration-200 ease-in-out;
-}
-
-.interactive:hover {
-  @apply scale-105;
-}
-
-.interactive:active {
-  @apply scale-95;
-}
-
-/* 响应式字体 */
-@media (max-width: 640px) {
-  .ip-display {
-    font-size: 2rem;
-  }
-
-  .location-primary {
-    font-size: 1.125rem;
-  }
-}
-
-/* 移动端触摸优化 */
-@media (max-width: 768px) {
-  /* 确保按钮有足够的触摸区域 */
-  button, [role="button"] {
-    min-height: 44px;
-    min-width: 44px;
-  }
-  
-  /* 优化小屏幕上的间距 */
-  .mobile-spacing {
-    padding: 1rem;
-  }
-  
-  /* 移动端文字换行优化 */
-  .mobile-text-wrap {
-    word-break: break-all;
-    overflow-wrap: break-word;
-  }
-}
-
-/* 主题切换过渡动画 */
-*,
-*::before,
-*::after {
-  transition-property: color, background-color, border-color,
-    text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter,
-    backdrop-filter;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 300ms;
-}
-
-/* 为避免过度动画，某些元素使用更快的过渡 */
-button,
-[role="button"],
-input,
-textarea,
-select {
-  transition-duration: 100ms;
-}
-
-/* View Transitions API 支持 - 主题切换优化 */
-@supports (view-transition-name: root) {
-  /* 用于主题切换 */
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: 0.6s;
-  }
-
-  ::view-transition-old(root) {
-    animation: none;
-  }
-
-  ::view-transition-new(root) {
-    animation: none;
-    mix-blend-mode: normal;
-  }
-
-  .dark::view-transition-old(root) {
-    z-index: 1;
-  }
-
-  .dark::view-transition-new(root) {
-    z-index: 999;
-  }
-
-  :root:not(.dark)::view-transition-old(root) {
-    z-index: 999;
-  }
-
-  :root:not(.dark)::view-transition-new(root) {
-    z-index: 1;
-  }
-
-  /* 在主题切换期间优化动画性能 */
-  .theme-transitioning * {
-    animation-play-state: paused !important;
-    transition: none !important;
-  }
-}
-
-/* 为了在不支持 View Transitions API 的浏览器中也有平滑过渡 */
-html {
   color-scheme: light;
+  --color-primary: 56 103 214;
+  --color-secondary: 100 116 139;
+  --color-success: 34 139 101;
+  --color-warning: 168 109 33;
+  --color-error: 194 62 71;
+  --color-background: 248 250 253;
+  --color-background-secondary: 241 245 250;
+  --color-surface: 255 255 255;
+  --color-surface-hover: 244 247 251;
+  --color-border: 225 231 240;
+  --color-border-light: 236 240 246;
+  --color-text-primary: 28 39 57;
+  --color-text-secondary: 82 99 123;
+  --color-text-muted: 104 118 140;
+  --color-text-inverse: 255 255 255;
+  --color-card-background: var(--color-surface);
+  --color-card-border: var(--color-border);
+  --color-glass-background: 255 255 255 / 0.96;
+  --color-glass-border: 225 231 240 / 0.8;
+  --color-hover-background: var(--color-surface-hover);
+  --color-active-background: 235 242 255;
+  --color-focus-ring: 56 103 214;
+  --color-accent-soft: 235 242 255;
+  --color-accent-text: 43 91 186;
+  --panel-radius: 16px;
+  --control-radius: 10px;
+  --panel-shadow: 0 4px 20px rgb(28 39 57 / 0.035);
 }
 
 html.dark {
   color-scheme: dark;
+  --color-primary: 139 177 255;
+  --color-success: 112 202 164;
+  --color-warning: 222 181 116;
+  --color-error: 242 146 151;
+  --color-background: 21 25 33;
+  --color-background-secondary: 25 30 40;
+  --color-surface: 29 35 46;
+  --color-surface-hover: 37 45 58;
+  --color-border: 52 62 78;
+  --color-border-light: 42 51 66;
+  --color-text-primary: 235 240 248;
+  --color-text-secondary: 177 189 208;
+  --color-text-muted: 143 158 182;
+  --color-text-inverse: 21 25 33;
+  --color-glass-background: 29 35 46 / 0.98;
+  --color-glass-border: 52 62 78 / 0.8;
+  --color-active-background: 39 54 80;
+  --color-focus-ring: 139 177 255;
+  --color-accent-soft: 39 54 80;
+  --color-accent-text: 161 193 255;
+  --panel-shadow: 0 4px 20px rgb(0 0 0 / 0.08);
 }
 
-/* 深色模式特定样式优化 */
-@media (prefers-color-scheme: dark) {
-  /* 为系统主题用户提供更好的默认体验 */
-  :root:not(.light) {
-    color-scheme: dark;
-  }
+* { box-sizing: border-box; }
+html {
+  -webkit-text-size-adjust: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--color-border)) transparent;
+}
+body {
+  margin: 0;
+  background: rgb(var(--color-background));
+  color: rgb(var(--color-text-primary));
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.font-mono { font-family: var(--font-jetbrains-mono), ui-monospace, monospace; }
+.font-sans { font-family: var(--font-inter), system-ui, sans-serif; }
+::selection { background: rgb(var(--color-primary) / 0.2); }
+button, a, summary { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), summary { cursor: pointer; }
+button:disabled { cursor: default; }
+button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid rgb(var(--color-focus-ring));
+  outline-offset: 3px;
 }
 
-/* 减少动画设置 */
+/* Theme changes are synchronous; only deliberate hover states have transitions. */
+html.theme-changing,
+html.theme-changing *,
+html.theme-changing *::before,
+html.theme-changing *::after { transition: none !important; }
+
+@layer components {
+.ui-card {
+  border: 1px solid rgb(var(--color-border));
+  border-radius: var(--panel-radius);
+  background: rgb(var(--color-surface));
+  box-shadow: var(--panel-shadow);
+}
+.ui-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: var(--control-radius);
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-text-secondary));
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out;
+}
+.ui-button:disabled { opacity: 0.5; }
+.ui-button-primary {
+  border-color: rgb(var(--color-primary));
+  background: rgb(var(--color-primary));
+  color: rgb(var(--color-text-inverse));
+}
+.ui-icon-button { width: 44px; padding: 0; flex-shrink: 0; }
+.ui-input {
+  min-height: 44px;
+  min-width: 0;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 12px;
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-text-primary));
+}
+.ui-input::placeholder { color: rgb(var(--color-text-muted)); }
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgb(var(--color-surface-hover));
+  color: rgb(var(--color-text-secondary));
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.ui-badge-accent { background: rgb(var(--color-accent-soft)); color: rgb(var(--color-accent-text)); }
+.ui-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.ui-section-heading > svg { width: 17px; height: 17px; color: rgb(var(--color-text-muted)); }
+.ui-empty-state { color: rgb(var(--color-text-secondary)); text-align: center; padding: 36px 20px; }
+
+@media (hover: hover) and (pointer: fine) {
+  .ui-button:not(:disabled):hover { background: rgb(var(--color-surface-hover)); border-color: rgb(var(--color-text-muted) / 0.6); }
+  .ui-button-primary:not(:disabled):hover { background: rgb(var(--color-primary) / 0.9); border-color: rgb(var(--color-primary)); }
+}
+
+}
+
+/* Leaflet owns its marker transforms; do not animate or replace them. */
+.leaflet-container { font-family: inherit; z-index: 0; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-text-primary));
+}
+.leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 4px 16px rgb(0 0 0 / 0.12); }
+.leaflet-popup-content { margin: 0; }
+.leaflet-container a.leaflet-popup-close-button { color: rgb(var(--color-text-secondary)); }
+.leaflet-control-zoom { overflow: hidden; border: 1px solid rgb(var(--color-border)) !important; border-radius: 10px !important; box-shadow: 0 2px 8px rgb(0 0 0 / 0.06) !important; }
+.leaflet-control-zoom a { background: rgb(var(--color-surface)) !important; color: rgb(var(--color-text-primary)) !important; border-color: rgb(var(--color-border)) !important; width: 36px !important; height: 36px !important; line-height: 36px !important; }
+.leaflet-control-attribution { background: rgb(var(--color-surface) / 0.92) !important; color: rgb(var(--color-text-secondary)); }
+.leaflet-control-attribution a { color: rgb(var(--color-accent-text)); }
+.dark .ip-map-tiles { filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.82) saturate(0.7); }
+
+@media (max-width: 640px) {
+  .leaflet-control-zoom a { width: 44px !important; height: 44px !important; line-height: 44px !important; }
+}
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
-
-/* 打印样式 */
 @media print {
-  body {
-    color: black !important;
-    background: white !important;
-  }
-
-  .no-print {
-    display: none !important;
-  }
-}
-
-/* Leaflet 地图样式优化 */
-.leaflet-container {
-  @apply font-sans;
-  z-index: 0;
-}
-
-.leaflet-popup-content-wrapper {
-  @apply bg-white dark:bg-gray-800 border-0 shadow-xl;
-  border-radius: 12px !important;
-}
-
-.leaflet-popup-content {
-  @apply text-gray-900 dark:text-gray-100 m-0;
-  font-family: inherit !important;
-}
-
-.leaflet-popup-tip {
-  @apply bg-white dark:bg-gray-800 border-0;
-}
-
-.leaflet-popup-close-button {
-  @apply text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200;
-  font-size: 20px !important;
-  padding: 4px 8px !important;
-}
-
-/* 自定义弹窗样式 */
-.custom-popup .leaflet-popup-content-wrapper {
-  @apply shadow-2xl;
-  background: rgba(255, 255, 255, 0.95) !important;
-  backdrop-filter: blur(8px) !important;
-}
-
-.dark .custom-popup .leaflet-popup-content-wrapper {
-  background: rgba(31, 41, 55, 0.95) !important;
-}
-
-/* 地图控件样式 */
-.leaflet-control-zoom {
-  @apply shadow-lg;
-}
-
-.leaflet-control-zoom a {
-  @apply bg-white/90 dark:bg-gray-800/90 text-gray-700 dark:text-gray-300;
-  backdrop-filter: blur(8px) !important;
-}
-
-.leaflet-control-zoom a:hover {
-  @apply bg-white dark:bg-gray-800;
-}
-
-/* 只调整底图颜色，标记、弹窗和署名保留各自的主题样式。 */
-.dark .ip-map-tiles {
-  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.85);
-}
-
-.leaflet-control-attribution {
-  background: rgb(var(--color-surface)) !important;
-  color: rgb(var(--color-text-secondary));
-}
-
-/* 地图标记动画 */
-.leaflet-marker-icon {
-  transition: transform 0.3s ease-in-out;
-}
-
-.leaflet-marker-icon:hover {
-  transform: scale(1.1);
+  body { background: white !important; color: black !important; }
+  .no-print { display: none !important; }
 }

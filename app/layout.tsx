@@ -60,18 +60,19 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              try {
-                if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                  document.documentElement.classList.add('dark')
-                } else {
-                  document.documentElement.classList.remove('dark')
-                }
-              } catch (_) {}
+                let preference = null;
+                try { preference = localStorage.getItem('theme'); } catch (_) {}
+                const dark = preference === 'dark' ||
+                  (preference !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                const root = document.documentElement;
+                root.classList.toggle('dark', dark);
+                root.classList.toggle('light', !dark);
+                root.style.colorScheme = dark ? 'dark' : 'light';
             `,
           }}
         />
       </head>
-      <body className="font-sans antialiased bg-[rgb(var(--color-background))] text-[rgb(var(--color-text-primary))] transition-colors duration-300">
+      <body className="font-sans antialiased">
         <div id="root">
           {children}
         </div>
