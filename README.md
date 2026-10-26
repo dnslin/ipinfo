@@ -26,7 +26,9 @@ pnpm start
 
 项目使用 Next.js 16、React 19、Tailwind CSS 4 和 Zustand。依赖版本以 `package.json` 和 `pnpm-lock.yaml` 为准。
 
-`pnpm test` 使用生产构建启动临时本地服务，检查首页、静态资源和 API 参数校验，不触发数据库下载。
+`pnpm test:unit` 使用 Node 测试运行器和 tsx 检查真实的数据转换、初始化、查询状态、BGP 和坐标处理逻辑，不依赖外部服务。
+
+`pnpm test` 先运行单元测试，再使用已有生产构建启动临时服务，检查首页、静态资源和 API 参数校验，不触发数据库下载。因此运行完整测试前需要先执行 `pnpm build`。
 
 ## GeoIP 数据库
 
@@ -36,7 +38,17 @@ pnpm start
 - `GeoLite2-ASN.mmdb`：ASN 和运营商。
 - `GeoCN.mmdb`：中国地区补充数据。
 
-应用会检查并尝试下载缺失或无效的文件，也可以手动放置数据库。下载地址在 `lib/geoip/downloader.ts` 中维护。BGP、代理检测和补充地理信息查询还依赖外部服务。
+应用从 [P3TERX/GeoLite.mmdb](https://github.com/P3TERX/GeoLite.mmdb/releases/latest) 和 [ljxi/GeoCN](https://github.com/ljxi/GeoCN/releases/latest) 下载缺失或无效的文件，并通过 MMDB Reader 校验格式。也可以手动放置数据库。已经有效的文件会继续使用；自动初始化不会定期更新它们。
+
+City 库用于基础查询。ASN 或 GeoCN 暂时不可用时，基础查询仍然可用。`/api/init` 会分别返回 `canQuery`（基础查询可用）、`isReady`（三个库均就绪）和各文件的状态、构建日期及错误。显式发送 POST 可重试补充库下载，并在成功后清除旧查询缓存。
+
+当前 GeoCN 使用 `division_code`、`isp`、`type` 字段。行政区名称使用随代码打包的官方码表。GeoCN 只补充地区和运营商，地图坐标及精度半径保留 MaxMind 的实际数据，不通过地名生成坐标。`location.source` 标明坐标来源，未知坐标返回 `null`。本地地址不需要数据库，来源为 `Local`。
+
+IP 定位无法代表设备或街道位置。不同数据库的地区与坐标可能不同；公共 DNS 的任播记录也可能没有位置。界面会显示来源和实际精度半径，并对无坐标记录显示空状态。
+
+地图使用 Leaflet 和 [OpenStreetMap 标准底图](https://operations.osmfoundation.org/policies/tiles/)，由浏览器直接请求并遵循 HTTP 缓存，保留可见署名。底图仅按当前视图加载，不提供批量或离线下载；深浅主题共用同一底图。BGP 使用 [RIPE RIS 邻接观测](https://stat.ripe.net/docs/data-api/api-endpoints/asn-neighbours)，不把观测到的相邻网络推断为商业对等关系或 Tier 层级。
+
+美团溯源和代理检测仍依赖外部服务。外部服务拒绝查询或未提供数据时会保留具体错误，不用其他来源冒充成功结果。IPv4/IPv6 版本入口依赖实际部署的 `ip`、`ip4`、`ip6` 子域名和对应网络配置，本地预览不能验证双栈入口。
 
 ## Docker
 
