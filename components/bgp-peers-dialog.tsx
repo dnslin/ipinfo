@@ -32,7 +32,7 @@ export default function BGPPeersDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="!max-w-[95vw] w-full max-h-[90vh] overflow-hidden bg-white/98 backdrop-blur-sm sm:!max-w-[95vw]">
+      <DialogContent className="!max-w-[95vw] w-full max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-primary))] p-4 md:p-6 sm:!max-w-[95vw]">
         <BGPPeersContent
           key={asn}
           asn={asn}
@@ -68,7 +68,7 @@ function BGPPeersContent({
       setBgpData(data);
       
       toast.success("BGP 数据获取成功", {
-        description: `找到 ${data.allPeers.length} 个对等关系`,
+        description: `找到 ${data.allPeers.length} 个邻接关系`,
         duration: 1000,
       });
     }).catch((err) => {
@@ -95,17 +95,17 @@ function BGPPeersContent({
 
   return (
     <>
-        <DialogHeader>
+        <DialogHeader className="min-w-0 pr-10">
           <DialogTitle className="flex items-center space-x-2">
             <Network className="w-5 h-5 text-blue-500" />
-            <span>BGP 对等关系</span>
+            <span>BGP 邻接关系</span>
           </DialogTitle>
-          <DialogDescription>
-            AS{asn} {asnName && `(${asnName})`} 的 BGP 对等连接关系图
+          <DialogDescription className="break-words text-[rgb(var(--color-text-secondary))]">
+            AS{asn} {asnName && `(${asnName})`} 的 BGP 邻接关系。数据为 RIPE RIS 观测到的相邻网络。
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 overflow-y-auto">
+        <div className="min-h-0 space-y-4 overflow-y-auto">
           {/* 加载状态 */}
           {isLoading && (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
@@ -161,8 +161,8 @@ function BGPPeersContent({
                   <div className="flex items-center space-x-2">
                     <Layers className="w-4 h-4 text-emerald-500" />
                     <span className="text-sm text-[rgb(var(--color-text-secondary))]">
-                      {protocolType === 'ipv4' ? 'IPv4 对等' : 
-                       protocolType === 'ipv6' ? 'IPv6 对等' : '总对等数'}
+                      {protocolType === 'ipv4' ? 'IPv4 邻接' :
+                       protocolType === 'ipv6' ? 'IPv6 邻接' : '总邻接数'}
                     </span>
                   </div>
                   <p className="text-lg font-bold text-[rgb(var(--color-text-primary))] mt-1">
@@ -175,7 +175,7 @@ function BGPPeersContent({
                 <div className="bg-[rgb(var(--color-surface))] rounded-lg p-4 border border-[rgb(var(--color-border))] transition-colors duration-300">
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                    <span className="text-sm text-[rgb(var(--color-text-secondary))]">IPv4 对等</span>
+                    <span className="text-sm text-[rgb(var(--color-text-secondary))]">IPv4 邻接</span>
                   </div>
                   <p className="text-lg font-bold text-[rgb(var(--color-text-primary))] mt-1">
                     {bgpData.ipv4Peers.length}
@@ -185,7 +185,7 @@ function BGPPeersContent({
                 <div className="bg-[rgb(var(--color-surface))] rounded-lg p-4 border border-[rgb(var(--color-border))] transition-colors duration-300">
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                    <span className="text-sm text-[rgb(var(--color-text-secondary))]">IPv6 对等</span>
+                    <span className="text-sm text-[rgb(var(--color-text-secondary))]">IPv6 邻接</span>
                   </div>
                   <p className="text-lg font-bold text-[rgb(var(--color-text-primary))] mt-1">
                     {bgpData.ipv6Peers.length}
@@ -195,7 +195,7 @@ function BGPPeersContent({
 
               {/* 网络关系图 */}
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center space-x-2">
                     <Globe className="w-5 h-5 text-green-500" />
                     <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
@@ -250,19 +250,19 @@ function BGPPeersContent({
                 </div>
                 
                 <div className="text-xs text-[rgb(var(--color-text-muted))] space-y-1">
-                  <p>• 拖拽节点可以调整布局，滚轮可以缩放图表</p>
+                  <p>• 拖拽画布可以平移图表，滚轮或按钮可以缩放</p>
                   <p>• 鼠标悬停在节点上查看详细信息</p>
-                  <p>• 不同颜色的连线表示不同类型的对等关系</p>
+                  <p>• 不同颜色的连线表示不同类型的邻接关系</p>
                   <p>• 蓝色实线表示IPv4连接，紫色虚线表示IPv6连接</p>
                 </div>
               </div>
 
-              {/* 对等节点列表 */}
+              {/* 邻接节点列表 */}
               {bgpData.allPeers.length > 0 && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <h3 className="text-lg font-semibold text-[rgb(var(--color-text-primary))]">
-                      对等节点列表
+                      邻接节点列表
                     </h3>
                     <span className="text-sm text-[rgb(var(--color-text-secondary))]">
                       {protocolType === 'ipv4' ? `IPv4: ${bgpData.ipv4Peers.length} 个节点` :
@@ -279,7 +279,7 @@ function BGPPeersContent({
                         key={peer.asn}
                         className="flex items-center justify-between p-3 bg-[rgb(var(--color-surface-hover))] rounded-lg border border-[rgb(var(--color-border))] transition-colors duration-300"
                       >
-                        <div className="flex items-center space-x-3">
+                        <div className="flex min-w-0 items-center gap-3">
                           <div className="flex items-center space-x-2">
                             {/* 类型指示器 */}
                             <div className={`w-3 h-3 rounded-full ${
@@ -300,7 +300,7 @@ function BGPPeersContent({
                             </span>
                           </div>
                           
-                          <div className="flex flex-col">
+                          <div className="flex min-w-0 flex-col break-words">
                             <span className="text-sm font-medium text-[rgb(var(--color-text-primary))]">
                               {peer.name}
                             </span>

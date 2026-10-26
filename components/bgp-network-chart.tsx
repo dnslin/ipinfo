@@ -1,36 +1,12 @@
 'use client';
 
-import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import * as d3 from 'd3';
-import { ProcessedBGPData, BGPPeer } from '@/lib/bgp-api';
+import { ProcessedBGPData } from '@/lib/bgp-api';
+import { buildBGPGraph, type NetworkNode } from '@/lib/bgp-graph';
 import { Globe, ZoomIn, ZoomOut, RotateCcw, Download } from 'lucide-react';
 import ReactCountryFlag from "react-country-flag";
 import { toast } from "sonner";
-
-interface NetworkNode {
-  id: string;
-  asn: number;
-  name: string;
-  description: string;
-  countryCode: string;
-  isCenter: boolean;
-  tier: 'origin' | 'tier1' | 'tier2' | 'tier3';
-  layer: number;
-  x: number;
-  y: number;
-  color: string;
-  flag: string;
-  label?: string;
-  protocolType: 'ipv4' | 'ipv6' | 'both';
-}
-
-interface NetworkLink {
-  source: string;
-  target: string;
-  sourceNode: NetworkNode;
-  targetNode: NetworkNode;
-  protocolType: 'ipv4' | 'ipv6';
-}
 
 interface BGPNetworkChartProps {
   data: ProcessedBGPData;
@@ -49,7 +25,8 @@ export default function BGPNetworkChart({
 }: BGPNetworkChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [selectedNode, setSelectedNode] = useState<NetworkNode | null>(null);
-  const [transform, setTransform] = useState(d3.zoomIdentity);
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const initialTransformRef = useRef(d3.zoomIdentity);
 
 
 
@@ -67,182 +44,29 @@ export default function BGPNetworkChart({
     return flagMap[countryCode] || '🌐';
   };
 
-// ASN层级分类常量 (基于公开的互联网基础设施数据，更新时间：2024年)
-const TIER1_ASNS = useMemo(() => [174, 209, 286, 701, 1239, 1299, 2914, 3257, 3320, 3356, 3491, 5511, 6453, 6461, 6830, 7018, 12956], []);
-const TIER2_ASNS = useMemo(() => [2497, 6939, 9370, 17676, 25820, 59105, 137409, 215871], []);
-
-  // 获取ASN层级
-  const getASNTier = useCallback((asn: number) => {
-    if (TIER1_ASNS.includes(asn)) return { tier: 'tier1' as const, label: 'Tier 1 ISP', color: '#3b82f6' };
-    if (TIER2_ASNS.includes(asn)) return { tier: 'tier2' as const, label: 'Tier 2 ISP', color: '#f97316' };
-    return { tier: 'tier3' as const, label: 'Regional ISP', color: '#8b5cf6' };
-  }, [TIER1_ASNS, TIER2_ASNS]);
-
-  // 处理数据并创建层次结构
-  const processData = useCallback(() => {
-    if (!data) return { nodes: [], links: [] };
-
-    const nodes: NetworkNode[] = [];
-    const links: NetworkLink[] = [];
-
-    // 根据协议类型筛选对等节点
-    let selectedPeers: BGPPeer[] = [];
-    if (protocolType === 'ipv4') {
-      selectedPeers = data.ipv4Peers;
-    } else if (protocolType === 'ipv6') {
-      selectedPeers = data.ipv6Peers;
-    } else {
-      // 合并IPv4和IPv6数据，但保持协议信息
-      const allPeers = new Map<number, BGPPeer>();
-      data.ipv4Peers.forEach(peer => allPeers.set(peer.asn, peer));
-      data.ipv6Peers.forEach(peer => allPeers.set(peer.asn, peer));
-      selectedPeers = Array.from(allPeers.values());
-    }
-
-    // 中心节点
-    const centerNode: NetworkNode = {
-      id: `as${data.centerAsn}`,
-      asn: data.centerAsn,
-      name: data.centerName || 'Target ASN',
-      description: '目标 ASN',
-      countryCode: 'CN',
-      isCenter: true,
-      tier: 'origin',
-      layer: 0,
-      x: 150,
-      y: height / 2,
-      color: '#22c55e',
-      flag: '🎯',
-      label: 'Origin',
-      protocolType: 'both'
-    };
-    nodes.push(centerNode);
-
-    // 按层级分组
-    const tier1Peers = selectedPeers.filter(p => getASNTier(p.asn).tier === 'tier1');
-    const tier2Peers = selectedPeers.filter(p => getASNTier(p.asn).tier === 'tier2');
-
-
-    // 添加层级节点
-    const addNodesForTier = (tierPeers: BGPPeer[], layer: number, startX: number) => {
-      tierPeers.forEach((peer, index) => {
-        const tierInfo = getASNTier(peer.asn);
-        
-        // 确定节点的协议类型
-        const hasIPv4 = data.ipv4Peers.some(p => p.asn === peer.asn);
-        const hasIPv6 = data.ipv6Peers.some(p => p.asn === peer.asn);
-        const nodeProtocolType = hasIPv4 && hasIPv6 ? 'both' : hasIPv6 ? 'ipv6' : 'ipv4';
-        
-        const node: NetworkNode = {
-          id: `as${peer.asn}`,
-          asn: peer.asn,
-          name: peer.name,
-          description: peer.description,
-          countryCode: peer.country_code,
-          isCenter: false,
-          tier: tierInfo.tier,
-          layer,
-          x: startX,
-          y: 100 + (index * 80) + (Math.random() - 0.5) * 20,
-          color: tierInfo.color,
-          flag: peer.country_code,
-          label: tierInfo.label,
-          protocolType: nodeProtocolType
-        };
-        nodes.push(node);
-
-        // 创建到中心节点的连接
-        if (protocolType === 'both') {
-          // 在混合模式下，为IPv4和IPv6分别创建连接
-          if (hasIPv4) {
-            links.push({
-              source: centerNode.id,
-              target: node.id,
-              sourceNode: centerNode,
-              targetNode: node,
-              protocolType: 'ipv4'
-            });
-          }
-          if (hasIPv6) {
-            links.push({
-              source: centerNode.id,
-              target: node.id,
-              sourceNode: centerNode,
-              targetNode: node,
-              protocolType: 'ipv6'
-            });
-          }
-        } else {
-          // 在单一协议模式下，只创建一种连接
-          links.push({
-            source: centerNode.id,
-            target: node.id,
-            sourceNode: centerNode,
-            targetNode: node,
-            protocolType: protocolType
-          });
-        }
-      });
-    };
-
-    if (tier1Peers.length > 0) addNodesForTier(tier1Peers, 1, 400);
-    if (tier2Peers.length > 0) addNodesForTier(tier2Peers, 2, 650);
-
-    return { nodes, links };
-  }, [data, protocolType, height, getASNTier]);
+  const graph = useMemo(() => buildBGPGraph(data, protocolType, height), [data, protocolType, height]);
 
   // 绘制图表
   useEffect(() => {
-    if (!data || !svgRef.current) return;
+    if (!svgRef.current) return;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
 
-    const { nodes, links } = processData();
+    const { nodes, links } = graph;
 
     // 创建缩放行为
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 3])
       .on("zoom", (event) => {
-        setTransform(event.transform);
         g.attr("transform", event.transform);
       });
 
+    zoomRef.current = zoom;
     svg.call(zoom);
 
     // 主要绘图组
     const g = svg.append("g");
-
-    // 创建背景区域
-    const backgroundAreas = [
-      { x: 50, width: 150, label: 'Origins', color: '#22c55e' },
-      { x: 300, width: 150, label: 'Tier 1 ISPs', color: '#3b82f6' },
-      { x: 550, width: 150, label: 'Tier 2 ISPs', color: '#f97316' }
-      // 移除区域ISPs区域以简化显示
-    ];
-
-    backgroundAreas.forEach(area => {
-      g.append("rect")
-        .attr("x", area.x)
-        .attr("y", 50)
-        .attr("width", area.width)
-        .attr("height", height - 100)
-        .attr("fill", area.color)
-        .attr("fill-opacity", 0.1)
-        .attr("stroke", area.color)
-        .attr("stroke-width", 2)
-        .attr("stroke-dasharray", "5,5")
-        .attr("rx", 8);
-
-      g.append("text")
-        .attr("x", area.x + area.width / 2)
-        .attr("y", 35)
-        .attr("text-anchor", "middle")
-        .attr("fill", area.color)
-        .attr("font-size", "14px")
-        .attr("font-weight", "bold")
-        .text(area.label);
-    });
 
     // 添加箭头标记 - IPv4
     const defs = g.append("defs");
@@ -294,6 +118,15 @@ const TIER2_ASNS = useMemo(() => [2497, 6939, 9370, 17676, 25820, 59105, 137409,
       .attr("class", "node")
       .attr("transform", d => `translate(${d.x}, ${d.y})`)
       .style("cursor", "pointer")
+      .attr("tabindex", 0)
+      .attr("role", "button")
+      .attr("aria-label", d => `查看 AS${d.asn} ${d.name}`)
+      .on("keydown", (event, d) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setSelectedNode(d);
+        }
+      })
       .on("click", (event, d) => {
         setSelectedNode(d);
       });
@@ -345,6 +178,7 @@ const TIER2_ASNS = useMemo(() => [2497, 6939, 9370, 17676, 25820, 59105, 137409,
       .attr('class', 'bgp-tooltip')
       .style('position', 'absolute')
       .style('visibility', 'hidden')
+      .style('white-space', 'pre-line')
       .style('background', 'rgb(var(--color-surface))')
       .style('color', 'rgb(var(--color-text-primary))')
       .style('border', '1px solid rgb(var(--color-border))')
@@ -359,13 +193,11 @@ const TIER2_ASNS = useMemo(() => [2497, 6939, 9370, 17676, 25820, 59105, 137409,
       .on('mouseover', (event, d) => {
         tooltip
           .style('visibility', 'visible')
-          .html(
-            `<div><strong>AS${d.asn}</strong></div>` +
-            `<div>${d.name}</div>` +
-            `<div>${d.description}</div>` +
-            (d.countryCode ? `<div>国家: ${d.countryCode}</div>` : '') +
-            `<div>层级: ${d.label || 'Origin'}</div>` +
-            `<div>协议: ${d.protocolType === 'both' ? 'IPv4/IPv6' : d.protocolType}</div>`
+          .text(
+            [`AS${d.asn}`, d.name, d.description,
+              d.countryCode ? `国家: ${d.countryCode}` : "",
+              `协议: ${d.protocolType === 'both' ? 'IPv4/IPv6' : d.protocolType}`,
+            ].filter(Boolean).join("\n")
           );
       })
       .on('mousemove', (event) => {
@@ -392,37 +224,35 @@ const TIER2_ASNS = useMemo(() => [2497, 6939, 9370, 17676, 25820, 59105, 137409,
         timeZone: 'UTC'
       }) + ' UTC');
 
-         // 应用当前变换
-     g.attr("transform", transform.toString());
+    const maxX = Math.max(...nodes.map(node => node.x + 120));
+    const maxY = Math.max(...nodes.map(node => node.y + 50));
+    const scale = Math.min(1, (width - 80) / maxX, (height - 80) / maxY);
+    initialTransformRef.current = d3.zoomIdentity.translate(40, 40).scale(scale);
+    zoom.scaleExtent([Math.min(0.1, scale), 3]);
+    svg.call(zoom.transform, initialTransformRef.current);
 
     // 清理函数
     return () => {
-      d3.select('body').selectAll('.bgp-tooltip').remove();
+      tooltip.remove();
+      svg.on('.zoom', null);
+      zoomRef.current = null;
     };
 
-  }, [data, protocolType, transform, processData, height]);
+  }, [graph, height, width]);
 
-  // 控制函数
   const handleZoomIn = () => {
-    const svg = d3.select(svgRef.current!);
-    svg.transition().duration(300).call(
-      d3.zoom<SVGSVGElement, unknown>().scaleBy, 1.2
-    );
+    if (!svgRef.current || !zoomRef.current) return;
+    d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.scaleBy, 1.2);
   };
 
   const handleZoomOut = () => {
-    const svg = d3.select(svgRef.current!);
-    svg.transition().duration(300).call(
-      d3.zoom<SVGSVGElement, unknown>().scaleBy, 0.8
-    );
+    if (!svgRef.current || !zoomRef.current) return;
+    d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.scaleBy, 0.8);
   };
 
   const handleReset = () => {
-    const svg = d3.select(svgRef.current!);
-    svg.transition().duration(500).call(
-      d3.zoom<SVGSVGElement, unknown>().transform,
-      d3.zoomIdentity
-    );
+    if (!svgRef.current || !zoomRef.current) return;
+    d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.transform, initialTransformRef.current);
   };
 
   const handleExport = () => {
@@ -474,9 +304,9 @@ const TIER2_ASNS = useMemo(() => [2497, 6939, 9370, 17676, 25820, 59105, 137409,
   };
 
   // 统计信息
-  const { nodes } = processData();
-  const tier1Count = nodes.filter(n => n.tier === 'tier1').length;
-  const tier2Count = nodes.filter(n => n.tier === 'tier2').length;
+  const { nodes, links } = graph;
+  const peerCount = nodes.length - 1;
+  const countries = [...new Set(nodes.filter(node => !node.isCenter && node.countryCode).map(node => node.countryCode))];
 
   return (
     <div className={`w-full ${className}`}>
@@ -494,24 +324,28 @@ const TIER2_ASNS = useMemo(() => [2497, 6939, 9370, 17676, 25820, 59105, 137409,
         {/* 控制按钮 */}
         <div className="absolute top-4 right-4 flex flex-col gap-2">
           <button
+            aria-label="放大网络图"
             onClick={handleZoomIn}
             className="w-10 h-10 bg-[rgb(var(--color-surface))]/90 backdrop-blur-sm border border-[rgb(var(--color-border))] rounded-md hover:bg-[rgb(var(--color-surface-hover))] transition-colors duration-200 flex items-center justify-center"
           >
             <ZoomIn className="h-4 w-4" />
           </button>
           <button
+            aria-label="缩小网络图"
             onClick={handleZoomOut}
             className="w-10 h-10 bg-[rgb(var(--color-surface))]/90 backdrop-blur-sm border border-[rgb(var(--color-border))] rounded-md hover:bg-[rgb(var(--color-surface-hover))] transition-colors duration-200 flex items-center justify-center"
           >
             <ZoomOut className="h-4 w-4" />
           </button>
           <button
+            aria-label="重置网络图"
             onClick={handleReset}
             className="w-10 h-10 bg-[rgb(var(--color-surface))]/90 backdrop-blur-sm border border-[rgb(var(--color-border))] rounded-md hover:bg-[rgb(var(--color-surface-hover))] transition-colors duration-200 flex items-center justify-center"
           >
             <RotateCcw className="h-4 w-4" />
           </button>
           <button
+            aria-label="导出网络图"
             onClick={handleExport}
             className="w-10 h-10 bg-[rgb(var(--color-surface))]/90 backdrop-blur-sm border border-[rgb(var(--color-border))] rounded-md hover:bg-[rgb(var(--color-surface-hover))] transition-colors duration-200 flex items-center justify-center"
           >
@@ -528,16 +362,13 @@ const TIER2_ASNS = useMemo(() => [2497, 6939, 9370, 17676, 25820, 59105, 137409,
           <div className="space-y-1 text-xs">
             <div className="flex items-center gap-2">
               <div className="w-4 h-3 rounded bg-green-500"></div>
-              <span className="text-[rgb(var(--color-text-secondary))]">Origins (源AS)</span>
+              <span className="text-[rgb(var(--color-text-secondary))]">目标 ASN</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-3 rounded bg-blue-500"></div>
-              <span className="text-[rgb(var(--color-text-secondary))]">Tier 1 ISPs</span>
+              <span className="text-[rgb(var(--color-text-secondary))]">邻接 ASN</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-3 rounded bg-orange-500"></div>
-              <span className="text-[rgb(var(--color-text-secondary))]">Tier 2 ISPs</span>
-            </div>
+
           </div>
           
           {/* 协议类型图例 */}
@@ -568,19 +399,20 @@ const TIER2_ASNS = useMemo(() => [2497, 6939, 9370, 17676, 25820, 59105, 137409,
 
       {/* 选中节点信息面板 */}
       {selectedNode && (
-        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="mt-4 p-4 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="font-semibold text-blue-900">
-              选中节点: AS{selectedNode.asn} {selectedNode.flag}
+            <h3 className="font-semibold text-[rgb(var(--color-text-primary))]">
+              选中节点: AS{selectedNode.asn}
             </h3>
             <button
+              aria-label="关闭节点详情"
               onClick={() => setSelectedNode(null)}
               className="h-6 w-6 text-blue-600 hover:text-blue-800 transition-colors duration-200"
             >
               ✕
             </button>
           </div>
-          <div className="grid md:grid-cols-2 gap-2 text-sm">
+          <div className="grid md:grid-cols-2 gap-2 break-words text-sm">
             <div><strong>名称:</strong> {selectedNode.name}</div>
             <div><strong>描述:</strong> {selectedNode.description}</div>
             <div><strong>国家:</strong> 
@@ -592,7 +424,6 @@ const TIER2_ASNS = useMemo(() => [2497, 6939, 9370, 17676, 25820, 59105, 137409,
                 />
               ) : '🌐'} {selectedNode.countryCode}
             </div>
-            <div><strong>层级:</strong> {selectedNode.label || 'Origin'}</div>
             <div><strong>协议:</strong> {selectedNode.protocolType === 'both' ? 'IPv4/IPv6' : selectedNode.protocolType}</div>
           </div>
         </div>
@@ -603,26 +434,25 @@ const TIER2_ASNS = useMemo(() => [2497, 6939, 9370, 17676, 25820, 59105, 137409,
         <div className="bg-[rgb(var(--color-surface))] rounded-lg p-4 border border-[rgb(var(--color-border))] transition-colors duration-300">
           <div className="flex items-center space-x-2">
             <div className="w-3 h-3 bg-blue-500 rounded"></div>
-            <span className="text-sm text-[rgb(var(--color-text-secondary))]">Tier 1 ISPs</span>
+            <span className="text-sm text-[rgb(var(--color-text-secondary))]">邻接 ASN</span>
           </div>
           <div className="text-2xl font-bold text-[rgb(var(--color-text-primary))] mt-1">
-            {tier1Count}
+            {peerCount}
           </div>
-          <p className="text-xs text-[rgb(var(--color-text-muted))]">大型国际运营商</p>
+          <p className="text-xs text-[rgb(var(--color-text-muted))]">当前协议下的全部节点</p>
         </div>
         
         <div className="bg-[rgb(var(--color-surface))] rounded-lg p-4 border border-[rgb(var(--color-border))] transition-colors duration-300">
           <div className="flex items-center space-x-2">
             <div className="w-3 h-3 bg-orange-500 rounded"></div>
-            <span className="text-sm text-[rgb(var(--color-text-secondary))]">Tier 2 ISPs</span>
+            <span className="text-sm text-[rgb(var(--color-text-secondary))]">连接数</span>
           </div>
           <div className="text-2xl font-bold text-[rgb(var(--color-text-primary))] mt-1">
-            {tier2Count}
+            {links.length}
           </div>
-          <p className="text-xs text-[rgb(var(--color-text-muted))]">区域性大型ISP</p>
+          <p className="text-xs text-[rgb(var(--color-text-muted))]">双协议分别计数</p>
         </div>
         
-                 {/* 移除区域ISPs统计卡片 */}
         
         <div className="bg-[rgb(var(--color-surface))] rounded-lg p-4 border border-[rgb(var(--color-border))] transition-colors duration-300">
           <div className="flex items-center space-x-2">
@@ -630,11 +460,11 @@ const TIER2_ASNS = useMemo(() => [2497, 6939, 9370, 17676, 25820, 59105, 137409,
             <span className="text-sm text-[rgb(var(--color-text-secondary))]">覆盖地区</span>
           </div>
           <div className="flex flex-wrap gap-1 mt-1">
-            {Array.from(new Set(nodes.map(n => n.flag))).slice(0, 6).map((flag, i) => (
-              <span key={i} className="text-lg">{flag}</span>
+            {countries.slice(0, 6).map(countryCode => (
+              <span key={countryCode} className="text-lg">{getCountryFlag(countryCode)}</span>
             ))}
           </div>
-          <p className="text-xs text-[rgb(var(--color-text-muted))]">全球多地区覆盖</p>
+          <p className="text-xs text-[rgb(var(--color-text-muted))]">{countries.length > 0 ? "已提供国家信息的节点" : "数据源未提供国家信息"}</p>
         </div>
       </div>
     </div>
