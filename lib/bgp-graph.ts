@@ -1,18 +1,15 @@
 import type { ProcessedBGPData } from "./bgp-api";
-
-export type BGPProtocol = "ipv4" | "ipv6" | "both";
+import { getBGPNeighbors, type BGPProtocol, type NeighborProtocol } from "./bgp-explorer";
 
 export interface NetworkNode {
   id: string;
   asn: number;
   name: string;
-  description: string;
-  countryCode: string;
   isCenter: boolean;
   x: number;
   y: number;
-  color: string;
-  protocolType: BGPProtocol;
+  width: number;
+  height: number;
 }
 
 export interface NetworkLink {
@@ -20,59 +17,55 @@ export interface NetworkLink {
   target: string;
   sourceNode: NetworkNode;
   targetNode: NetworkNode;
-  protocolType: "ipv4" | "ipv6";
+  protocolType: NeighborProtocol | "unknown";
 }
 
 export function buildBGPGraph(
   data: ProcessedBGPData,
-  protocolType: BGPProtocol,
-  height = 600,
-): { nodes: NetworkNode[]; links: NetworkLink[] } {
-  const ipv4 = new Set(data.ipv4Peers.map(peer => peer.asn));
-  const ipv6 = new Set(data.ipv6Peers.map(peer => peer.asn));
-  const peers = protocolType === "ipv4" ? data.ipv4Peers
-    : protocolType === "ipv6" ? data.ipv6Peers
-    : [...new Map([...data.ipv4Peers, ...data.ipv6Peers].map(peer => [peer.asn, peer])).values()];
+  selectedAsn: number,
+  protocol: BGPProtocol = "both",
+  width = 720,
+  height = 320,
+): { nodes: NetworkNode[]; links: NetworkLink[]; vertical: boolean } | null {
+  const selected = getBGPNeighbors(data).find(neighbor => neighbor.asn === selectedAsn);
+  if (!selected) return null;
+  const protocols: Array<NeighborProtocol | "unknown"> = selected.protocols.length === 0 && protocol === "both"
+    ? ["unknown"]
+    : selected.protocols.filter(value => protocol === "both" || value === protocol);
+  if (protocols.length === 0) return null;
+
+  const vertical = width < 640;
+  const nodeWidth = Math.min(220, width - 48);
+  const nodeHeight = 80;
   const center: NetworkNode = {
     id: `as${data.centerAsn}`,
     asn: data.centerAsn,
     name: data.centerName,
-    description: "目标 ASN",
-    countryCode: "",
     isCenter: true,
-    x: 80,
-    y: height / 2 - 25,
-    color: "#22c55e",
-    protocolType,
+    x: vertical ? (width - nodeWidth) / 2 : 32,
+    y: vertical ? 24 : (height - nodeHeight) / 2,
+    width: nodeWidth,
+    height: nodeHeight,
   };
-  const nodes = [center];
-  const links: NetworkLink[] = [];
-  const rows = Math.max(1, Math.ceil(Math.sqrt(peers.length * height * 160 / (660 * 70))));
-
-  peers.forEach((peer, index) => {
-    const hasIPv4 = ipv4.has(peer.asn);
-    const hasIPv6 = ipv6.has(peer.asn);
-    const peerProtocol = hasIPv4 && hasIPv6 ? "both" : hasIPv6 ? "ipv6" : "ipv4";
-    const node: NetworkNode = {
-      id: `as${peer.asn}`,
-      asn: peer.asn,
-      name: peer.name,
-      description: peer.description,
-      countryCode: peer.country_code,
-      isCenter: false,
-      x: 340 + Math.floor(index / rows) * 160,
-      y: 80 + (index % rows) * 70,
-      color: "#3b82f6",
-      protocolType: peerProtocol,
-    };
-    nodes.push(node);
-
-    for (const protocol of ["ipv4", "ipv6"] as const) {
-      if ((protocolType === "both" || protocolType === protocol) && (protocol === "ipv4" ? hasIPv4 : hasIPv6)) {
-        links.push({ source: center.id, target: node.id, sourceNode: center, targetNode: node, protocolType: protocol });
-      }
-    }
-  });
-
-  return { nodes, links };
+  const neighbor: NetworkNode = {
+    id: `as${selected.asn}`,
+    asn: selected.asn,
+    name: selected.name,
+    isCenter: false,
+    x: vertical ? center.x : width - nodeWidth - 32,
+    y: vertical ? height - nodeHeight - 24 : center.y,
+    width: nodeWidth,
+    height: nodeHeight,
+  };
+  return {
+    nodes: [center, neighbor],
+    links: protocols.map(protocolType => ({
+      source: center.id,
+      target: neighbor.id,
+      sourceNode: center,
+      targetNode: neighbor,
+      protocolType,
+    })),
+    vertical,
+  };
 }

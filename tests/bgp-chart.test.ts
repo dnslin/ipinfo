@@ -12,27 +12,47 @@ const data: ProcessedBGPData = {
   allPeers: [peer(174), peer(13335), peer(64512)],
 };
 
-test("BGP graph includes every reported peer without a hardcoded ASN whitelist", () => {
-  const graph = buildBGPGraph(data, "both");
-  assert.deepEqual(graph.nodes.filter(node => !node.isCenter).map(node => node.asn), [174, 13335, 64512]);
+test("relationship view shows only the explicitly selected neighbour and target ASN", () => {
+  const graph = buildBGPGraph(data, 13335, "both");
+  assert.ok(graph);
+  assert.deepEqual(graph.nodes.map(node => node.asn), [15169, 13335]);
   assert.equal(graph.nodes.filter(node => node.asn === 13335).length, 1);
 });
 
-test("dual-stack peers retain separate IPv4 and IPv6 connections", () => {
-  const graph = buildBGPGraph(data, "both");
-  assert.deepEqual(graph.links.filter(link => link.target === "as13335").map(link => link.protocolType), ["ipv4", "ipv6"]);
+test("selected dual-stack neighbour retains both observed connections", () => {
+  const graph = buildBGPGraph(data, 13335, "both");
+  assert.ok(graph);
+  assert.deepEqual(graph.links.map(link => link.protocolType), ["ipv4", "ipv6"]);
+  assert.ok(graph.links.every(link => link.target === "as13335"));
 });
 
-test("protocol filters include every matching peer and exclude other protocols", () => {
-  assert.deepEqual(buildBGPGraph(data, "ipv4").nodes.filter(node => !node.isCenter).map(node => node.asn), [174, 13335]);
-  assert.deepEqual(buildBGPGraph(data, "ipv6").nodes.filter(node => !node.isCenter).map(node => node.asn), [13335, 64512]);
-  assert.ok(buildBGPGraph(data, "ipv6").links.every(link => link.protocolType === "ipv6"));
+test("relationship protocol filter never substitutes a different neighbour", () => {
+  const graph = buildBGPGraph(data, 13335, "ipv6");
+  assert.ok(graph);
+  assert.deepEqual(graph.nodes.map(node => node.asn), [15169, 13335]);
+  assert.deepEqual(graph.links.map(link => link.protocolType), ["ipv6"]);
+  assert.equal(buildBGPGraph(data, 174, "ipv6"), null);
 });
 
-test("empty BGP results show the target without inventing peers or its country", () => {
-  const graph = buildBGPGraph({ ...data, ipv4Peers: [], ipv6Peers: [], allPeers: [] }, "both");
-  assert.equal(graph.nodes.length, 1);
-  assert.equal(graph.nodes[0].asn, 15169);
-  assert.equal(graph.nodes[0].countryCode, "");
-  assert.equal(graph.links.length, 0);
+test("unknown ASN or empty data does not generate an invented relationship", () => {
+  assert.equal(buildBGPGraph(data, 99999, "both"), null);
+  assert.equal(buildBGPGraph({ ...data, ipv4Peers: [], ipv6Peers: [], allPeers: [] }, 13335), null);
+});
+
+test("mobile relationships keep both complete nodes inside the viewport", () => {
+  const graph = buildBGPGraph(data, 13335, "both", 288, 320);
+  assert.ok(graph);
+  assert.equal(graph.nodes[0].x, graph.nodes[1].x);
+  assert.ok(graph.nodes[0].y < graph.nodes[1].y);
+  assert.ok(graph.nodes.every(node => node.x >= 0 && node.x + node.width <= 288));
+});
+
+test("an observed neighbour without protocol counts still has a neutral relationship", () => {
+  const unspecified = { ...data, ipv4Peers: [], ipv6Peers: [], allPeers: [peer(13335)] };
+  const graph = buildBGPGraph(unspecified, 13335, "both");
+  assert.ok(graph);
+  assert.deepEqual(graph.nodes.map(node => node.asn), [15169, 13335]);
+  assert.deepEqual(graph.links.map(link => link.protocolType), ["unknown"]);
+  assert.equal(buildBGPGraph(unspecified, 13335, "ipv4"), null);
+  assert.equal(buildBGPGraph(unspecified, 13335, "ipv6"), null);
 });

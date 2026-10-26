@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import { Icon, type LatLngTuple } from "leaflet";
 import { MapPin, Globe, Copy, CheckCircle, Shield, LocateFixed } from "lucide-react";
@@ -22,7 +21,7 @@ function MapView({ center, zoom }: { center: LatLngTuple; zoom: number }) {
       type="button"
       aria-label="重新定位到查询位置"
       title="重新定位到查询位置"
-      className="absolute right-3 bottom-8 z-[1000] rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-2 text-[rgb(var(--color-text-secondary))] shadow-sm"
+      className="ui-button ui-icon-button absolute right-3 bottom-8 z-[1000] shadow-sm"
       onClick={(event) => {
         event.stopPropagation();
         map.setView(center, zoom, { animate: true });
@@ -75,29 +74,25 @@ export default function IPLocationMap({ ipData, className = "" }: { ipData: IPIn
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
-      className={`overflow-hidden rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-glass-background))] shadow-lg ${className}`}
-    >
-      <div className="flex flex-col justify-between gap-3 border-b border-[rgb(var(--color-border))] px-4 py-3 md:flex-row md:items-center md:px-6 md:py-4">
+    <div className={`ui-card overflow-hidden ${className}`}>
+      <div className="flex items-center justify-between gap-3 border-b border-[rgb(var(--color-border-light))] px-5 py-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <MapPin className="h-5 w-5 shrink-0 text-green-500" />
+          <MapPin className="h-[17px] w-[17px] shrink-0 text-[rgb(var(--color-text-muted))]" />
           <div>
-            <h3 className="font-semibold text-[rgb(var(--color-text-primary))]">地理位置</h3>
-            <p className="text-sm text-[rgb(var(--color-text-secondary))]">{location || "地区信息未提供"}</p>
+              <h2 className="text-sm font-semibold text-[rgb(var(--color-text-primary))]">地图位置</h2>
+              <p className="mt-0.5 text-xs text-[rgb(var(--color-text-muted))]">{location || "地区信息未提供"}</p>
           </div>
         </div>
         {center && !isPrivate && (
-          <button type="button" onClick={copyCoordinates} title="复制坐标" className="flex items-center gap-2 self-start rounded-lg px-2 py-1.5 text-sm text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))]">
+          <button type="button" onClick={copyCoordinates} title="复制坐标" aria-label="复制地图坐标" className="ui-button ui-icon-button border-transparent bg-transparent">
             {copied ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-            <span className="font-mono">{center[0].toFixed(4)}°, {center[1].toFixed(4)}°</span>
           </button>
         )}
       </div>
 
       {center && !isPrivate ? (
         <>
-          <div className="relative h-64 bg-[rgb(var(--color-surface-hover))] md:h-72">
+          <div className="relative h-64 bg-[rgb(var(--color-surface-hover))] md:h-80">
             <MapContainer center={center} zoom={zoom} style={{ height: "100%", width: "100%" }} zoomControl attributionControl scrollWheelZoom={false} maxZoom={provider.maxZoom}>
               <TileLayer
                 key={`${provider.url}-${tileAttempt}`}
@@ -121,18 +116,18 @@ export default function IPLocationMap({ ipData, className = "" }: { ipData: IPIn
           {tileError && (
             <div role="status" className="flex items-center justify-between gap-3 border-t border-[rgb(var(--color-border))] px-4 py-3 text-sm text-[rgb(var(--color-text-secondary))]">
               <span>底图加载失败，坐标信息仍可查看。</span>
-              <button type="button" className="shrink-0 text-blue-600 dark:text-blue-400" onClick={() => { setTileError(false); setTileAttempt((attempt) => attempt + 1); }}>重试底图</button>
+              <button type="button" className="ui-button shrink-0" onClick={() => { setTileError(false); setTileAttempt((attempt) => attempt + 1); }}>重试底图</button>
             </div>
           )}
         </>
       ) : (
-        <div className="flex h-48 flex-col items-center justify-center gap-3 bg-[rgb(var(--color-surface-hover))] text-[rgb(var(--color-text-secondary))]">
-          {isPrivate ? <Shield className="h-10 w-10" /> : <Globe className="h-10 w-10" />}
+        <div className="ui-empty-state flex min-h-60 flex-col items-center justify-center gap-3 text-sm">
+          {isPrivate ? <Shield className="h-7 w-7 text-[rgb(var(--color-text-muted))]" /> : <Globe className="h-7 w-7 text-[rgb(var(--color-text-muted))]" />}
           <p>{isPrivate ? "本地网络地址没有公网地理位置" : "此 IP 的数据库记录未提供有效坐标"}</p>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-[rgb(var(--color-surface))] px-4 py-3 text-xs text-[rgb(var(--color-text-secondary))] md:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[rgb(var(--color-border-light))] px-5 py-3 text-xs text-[rgb(var(--color-text-muted))] sm:px-6">
         <span>地区: {ipData.source === "Local" ? "本地地址分类" : ipData.source} · 坐标: {source ?? "未提供"}</span>
         <span>{center && !isPrivate ? accuracy : "无坐标"}</span>
       </div>
@@ -141,6 +136,6 @@ export default function IPLocationMap({ ipData, className = "" }: { ipData: IPIn
           地区与坐标来自不同数据库，地图按 MaxMind 估算坐标展示。
         </p>
       )}
-    </motion.div>
+    </div>
   );
 }
