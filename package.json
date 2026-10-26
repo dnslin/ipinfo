@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/*.test.mjs"
+    "test": "pnpm test:unit && node --test tests/smoke.test.mjs",
+    "test:unit": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@maxmind/geoip2-node": "^7.1.0",
@@ -25,8 +26,6 @@
     "mmdb-lib": "^3.0.3",
     "motion": "^14.6.0",
     "next": "16.4.3",
-    "next-themes": "^0.4.6",
-    "node-cache": "^5.1.2",
     "postcss": "^8.5.31",
     "react": "19.3.1",
     "react-country-flag": "^3.1.0",
@@ -44,6 +43,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "16.4.3",
     "tailwindcss": "^4.3.3",
+    "tsx": "4.23.15",
     "tw-animate-css": "^1.4.0",
     "typescript": "^6.0.3"
   },

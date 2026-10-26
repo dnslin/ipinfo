@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -11,23 +11,41 @@ interface ThemeContextValue {
   toggleTheme: () => void;
 }
 
-// 检测系统主题偏好
-const getSystemTheme = (): "light" | "dark" => {
-  if (typeof window === "undefined") return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-};
+let currentTheme: Theme | undefined;
+const themeChangeEvent = "ipinfo-theme-change";
 
-// 从localStorage获取保存的主题
+const getSystemTheme = (): "light" | "dark" =>
+  window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+
 const getStoredTheme = (): Theme => {
-  if (typeof window === "undefined") return "system";
   try {
-    const stored = localStorage.getItem("theme") as Theme;
-    return stored || "system";
+    const stored = localStorage.getItem("theme");
+    return stored === "light" || stored === "dark" ? stored : "system";
   } catch {
     return "system";
   }
+};
+
+const getThemeSnapshot = (): Theme => {
+  currentTheme ??= getStoredTheme();
+  return currentTheme;
+};
+
+const getServerTheme = (): Theme => "system";
+const getServerSystemTheme = (): "light" | "dark" => "light";
+
+const subscribeToTheme = (onChange: () => void) => {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key !== "theme" && event.key !== null) return;
+    currentTheme = getStoredTheme();
+    onChange();
+  };
+  window.addEventListener(themeChangeEvent, onChange);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener(themeChangeEvent, onChange);
+    window.removeEventListener("storage", onStorage);
+  };
 };
 
 const subscribeToSystemTheme = (onChange: () => void) => {
@@ -36,58 +54,38 @@ const subscribeToSystemTheme = (onChange: () => void) => {
   return () => mediaQuery.removeEventListener("change", onChange);
 };
 
-const getServerSystemTheme = (): "light" | "dark" => "light";
-
-// 应用主题到DOM
 const applyTheme = (resolvedTheme: "light" | "dark") => {
-  const root = document.documentElement;
-  root.classList.remove("light", "dark");
-  root.classList.add(resolvedTheme);
+  document.documentElement.classList.toggle("light", resolvedTheme === "light");
+  document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
+};
+
+const setTheme = (theme: Theme) => {
+  currentTheme = theme;
+  try {
+    localStorage.setItem("theme", theme);
+  } catch (error) {
+    console.warn("保存主题失败:", error);
+  }
+  applyTheme(theme === "system" ? getSystemTheme() : theme);
+  window.dispatchEvent(new Event(themeChangeEvent));
 };
 
 export const useTheme = (): ThemeContextValue => {
-  const [theme, setThemeState] = useState<Theme>(getStoredTheme);
-  const systemTheme = useSyncExternalStore(
-    subscribeToSystemTheme,
-    getSystemTheme,
-    getServerSystemTheme,
-  );
+  const theme = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, getServerTheme);
+  const systemTheme = useSyncExternalStore(subscribeToSystemTheme, getSystemTheme, getServerSystemTheme);
   const resolvedTheme = theme === "system" ? systemTheme : theme;
 
-  // 设置主题
-  const setTheme = (newTheme: Theme) => {
-    setThemeState(newTheme);
-
-    // 保存到localStorage
-    try {
-      localStorage.setItem("theme", newTheme);
-    } catch (error) {
-      console.warn("Failed to save theme to localStorage:", error);
-    }
-
-    // 应用解析后的主题
-    const newResolvedTheme = newTheme === "system" ? getSystemTheme() : newTheme;
-    applyTheme(newResolvedTheme);
-  };
-
-  // 切换主题（在light和dark之间切换）
-  const toggleTheme = () => {
-    const newTheme = resolvedTheme === "light" ? "dark" : "light";
-    setTheme(newTheme);
-  };
-
-  // 将初始化和系统配色变化同步到页面
   useEffect(() => {
-    applyTheme(theme === "system" ? getSystemTheme() : theme);
+    const savedTheme = getThemeSnapshot();
+    applyTheme(savedTheme === "system" ? getSystemTheme() : savedTheme);
   }, [theme, systemTheme]);
 
   return {
     theme,
     resolvedTheme,
     setTheme,
-    toggleTheme,
+    toggleTheme: () => setTheme(resolvedTheme === "light" ? "dark" : "light"),
   };
 };
 
-// 主题切换动画的CSS类
 export const themeTransition = "transition-colors duration-300 ease-in-out";

@@ -92,7 +92,7 @@ export default function ThemeToggle() {
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
       className="
-        relative p-2 rounded-lg
+        relative flex h-11 w-11 shrink-0 items-center justify-center p-2 rounded-lg
         bg-[rgb(var(--color-surface))]/80 backdrop-blur-sm
         hover:bg-[rgb(var(--color-surface-hover))]
         border border-[rgb(var(--color-border))]/50
@@ -100,6 +100,7 @@ export default function ThemeToggle() {
         transition-all duration-200
         group overflow-hidden
       "
+      aria-label={`切换到${resolvedTheme === 'light' ? '暗色' : '浅色'}模式`}
       title={`切换到${resolvedTheme === 'light' ? '暗色' : '浅色'}模式`}
     >
       <AnimatePresence mode="wait" initial={false}>
@@ -168,12 +169,13 @@ export function CompactThemeToggle() {
       whileHover={{ scale: 1.1 }}
       whileTap={{ scale: 0.9 }}
       className="
-        p-1.5 rounded-md
+        flex h-11 w-11 items-center justify-center p-1.5 rounded-md
         bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-surface-hover))]
         border border-[rgb(var(--color-border))]
         transition-all duration-200
         group
       "
+      aria-label={`切换到${resolvedTheme === 'light' ? '暗色' : '浅色'}模式`}
       title={`切换到${resolvedTheme === 'light' ? '暗色' : '浅色'}模式`}
     >
       <AnimatePresence mode="wait" initial={false}>
