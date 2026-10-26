@@ -1,9 +1,9 @@
-import { IPInfo } from "./store";
+import type { IPInfo } from "./store";
 import { detectIPVersion } from "./ip-detection";
 
 // 美团API响应接口定义
 interface MeituanIPResponse {
-  error?: { code: number; message: string };
+  error?: { code: number; message: string; type?: string };
   data?: {
     lng: number;
     fromwhere: string;
@@ -17,6 +17,15 @@ interface MeituanIPResponse {
     };
     lat: number;
   };
+}
+
+export class MeituanLocationNotFoundError extends Error {
+  readonly code = "MEITUAN_LOCATION_NOT_FOUND";
+
+  constructor(readonly upstreamError: NonNullable<MeituanIPResponse["error"]>) {
+    super("美团未收录此IP");
+    this.name = "MeituanLocationNotFoundError";
+  }
 }
 
 interface MeituanLocationResponse {
@@ -51,44 +60,40 @@ export class MeituanAPIService {
    * 查询IP地理位置信息
    */
   static async queryIPLocation(ip: string): Promise<IPInfo> {
-    try {
-      const url = new URL(this.IP_API_URL);
-      url.searchParams.set("rgeo", "true");
-      url.searchParams.set("ip", ip);
+    const url = new URL(this.IP_API_URL);
+    url.searchParams.set("rgeo", "true");
+    url.searchParams.set("ip", ip);
 
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        signal: AbortSignal.timeout(8000),
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          Referer: "https://www.meituan.com/",
-        },
-      });
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      signal: AbortSignal.timeout(8000),
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Referer: "https://www.meituan.com/",
+      },
+    });
 
-      if (!response.ok) {
-        throw new Error(
-          `美团API请求失败: ${response.status} ${response.statusText}`
-        );
-      }
-
-      const result: MeituanIPResponse = await response.json();
-
-      if (result.error) {
-        throw new Error(`美团未提供该 IP 的位置: ${result.error.message} (${result.error.code})`);
-      }
-
-      if (!result.data) {
-        throw new Error("美团API返回数据格式错误");
-      }
-
-      return this.convertToIPInfo(ip, result.data);
-    } catch (error) {
-      console.error("美团IP查询失败:", error);
-      throw new Error(
-        `美团IP查询失败: ${error instanceof Error ? error.message : "未知错误"}`
-      );
+    if (!response.ok) {
+      throw new Error(`美团API请求失败: ${response.status} ${response.statusText}`);
     }
+
+    const result: MeituanIPResponse = await response.json();
+
+    if (result.error?.code === 404) {
+      console.info("美团IP未收录:", { ip, upstream: result.error });
+      throw new MeituanLocationNotFoundError(result.error);
+    }
+
+    if (result.error) {
+      throw new Error(`美团未提供该 IP 的位置: ${result.error.message} (${result.error.code})`);
+    }
+
+    if (!result.data) {
+      throw new Error("美团API返回数据格式错误");
+    }
+
+    return this.convertToIPInfo(ip, result.data);
   }
 
   /**
