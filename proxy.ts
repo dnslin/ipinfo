@@ -77,7 +77,7 @@ export function proxy(request: NextRequest) {
 
   // 缓存设置
   if (url.pathname.startsWith("/api/query")) {
-    response.headers.set("Cache-Control", "public, max-age=300, s-maxage=300");
+    response.headers.set("Cache-Control", "private, no-store");
   }
 
   return response;

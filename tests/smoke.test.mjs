@@ -98,6 +98,7 @@ test("IP query rejects invalid input and keeps API proxy headers", async () => {
   });
   assert.equal(response.status, 400);
   assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  assert.match(response.headers.get("cache-control"), /private.*no-store/);
   assert.deepEqual(await response.json(), { error: "无效的IP地址格式" });
 });
 

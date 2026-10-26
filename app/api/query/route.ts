@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result, {
       headers: {
-        "Cache-Control": "public, max-age=300, s-maxage=300", // 缓存5分钟
+        "Cache-Control": "private, no-store",
       },
     });
   } catch (error) {
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result, {
       headers: {
-        "Cache-Control": "public, max-age=300, s-maxage=300", // 缓存5分钟
+        "Cache-Control": "private, no-store",
       },
     });
   } catch (error) {
