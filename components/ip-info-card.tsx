@@ -52,48 +52,19 @@ const isValidCountryCode = (code: string) => {
   );
 };
 
-// 检查是否为私有IP
-const isPrivateIP = (ip: string) => {
-  // 私有IPv4地址范围
-  const privateIPv4Ranges = [
-    /^10\./,
-    /^192\.168\./,
-    /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-    /^127\./,
-    /^169\.254\./,
-    /^0\.0\.0\.0$/,
-    /^255\.255\.255\.255$/,
-  ];
-
-  // 私有IPv6地址
-  const privateIPv6Ranges = [
-    /^::1$/,
-    /^fc[0-9a-f]{2}:/i,
-    /^fd[0-9a-f]{2}:/i,
-    /^fe80:/i,
-  ];
-
-  return (
-    privateIPv4Ranges.some((range) => range.test(ip)) ||
-    privateIPv6Ranges.some((range) => range.test(ip))
-  );
-};
-
 // 国旗组件，带有错误处理
 const CountryFlagWithFallback = ({
   countryCode,
-  ip,
   country,
   style,
   className = "",
 }: {
   countryCode: string;
-  ip: string;
   country: string;
   style?: React.CSSProperties;
   className?: string;
 }) => {
-  const isPrivate = isPrivateIP(ip);
+  const isPrivate = countryCode === "PRIVATE";
   const [failedCountry, setFailedCountry] = useState<string | null>(null);
 
   if (!isValidCountryCode(countryCode) || isPrivate) {
@@ -150,6 +121,7 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
 
   const tracedData = queryData.originalData === ipData ? queryData.tracedData : null;
   const currentData = tracedData ?? ipData;
+  const isLocalAddress = currentData.source === "Local";
   const [isBGPDialogOpen, setIsBGPDialogOpen] = useState(false);
   const [selectedASN, setSelectedASN] = useState<{
     asn: number;
@@ -174,7 +146,8 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
       });
 
       if (!response.ok) {
-        throw new Error(`溯源失败: ${response.statusText}`);
+        const result: { error?: string } = await response.json();
+        throw new Error(result.error || `溯源失败: ${response.status} ${response.statusText}`);
       }
 
       const meituanData: IPInfo = await response.json();
@@ -321,7 +294,7 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
     if (currentData.province) parts.push(currentData.province);
     if (currentData.city) parts.push(currentData.city);
     if (currentData.district) parts.push(currentData.district);
-    return parts.join(" · ");
+    return parts.filter(Boolean).join(" · ") || "地区信息未提供";
   };
 
 
@@ -346,11 +319,13 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
 
   // 获取数据源颜色
   const getSourceColor = (source: string) => {
+    if (source === "Local") return "text-[rgb(var(--color-text-secondary))]";
     if (source === "MeiTuan") return "text-yellow-600";
     return source === "MaxMind" ? "text-blue-600" : "text-green-600";
   };
 
   const getSourceBg = (source: string) => {
+    if (source === "Local") return "bg-[rgb(var(--color-surface-hover))]";
     if (source === "MeiTuan") return "bg-yellow-100 dark:bg-yellow-900/30";
     return source === "MaxMind"
       ? "bg-blue-100 dark:bg-blue-900/30"
@@ -395,7 +370,7 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center space-x-3 md:space-x-4 min-w-0 flex-1">
               <div
-                className={`p-3 rounded-2xl ${getVersionBg(
+                className={`shrink-0 p-3 rounded-2xl ${getVersionBg(
                   currentData.ipVersion
                 )} border border-[rgb(var(--color-border))] transition-colors duration-300`}
               >
@@ -406,15 +381,15 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <div className="mb-1">
                   <TextGenerateEffect
                     words={currentData.ip}
-                    className="text-xl md:text-3xl font-mono font-bold text-[rgb(var(--color-text-primary))] break-all"
+                    className="text-xl md:text-3xl font-mono font-bold text-[rgb(var(--color-text-primary))]"
                     duration={0.3}
                   />
                 </div>
-                <div className="flex items-center space-x-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <span
                     className={`px-3 py-1 rounded-full text-sm font-medium ${getVersionColor(
                       currentData.ipVersion
@@ -424,7 +399,6 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
                   </span>
                   <div className="flex items-center space-x-2">
                     <CountryFlagWithFallback
-                      ip={currentData.ip}
                       country={currentData.country}
                       countryCode={currentData.countryCode}
                       style={{
@@ -434,11 +408,11 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
                       }}
                     />
                     <span className="text-sm text-[rgb(var(--color-text-secondary))]">
-                      {isPrivateIP(currentData.ip)
+                      {isLocalAddress
                         ? "本地网络"
-                        : currentData.country}
+                        : currentData.country || "地区未知"}
                     </span>
-                    {isPrivateIP(currentData.ip) && (
+                    {isLocalAddress && (
                       <span className="text-xs text-[rgb(var(--color-text-muted))] bg-[rgb(var(--color-surface-hover))] px-2 py-0.5 rounded-full transition-colors duration-300">
                         私有
                       </span>
@@ -449,7 +423,7 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
                       currentData.source
                     )} ${getSourceColor(currentData.source)}`}
                   >
-                    {currentData.source}
+                    {currentData.source === "Local" ? "本地地址分类" : currentData.source}
                   </span>
                 </div>
               </div>
@@ -458,7 +432,7 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
             <div className="flex items-center space-x-2 flex-shrink-0">
               {/* 溯源按钮 */}
               {currentData.source !== "MeiTuan" &&
-                !isPrivateIP(currentData.ip) && (
+                !isLocalAddress && (
                   <button
                     onClick={handleTrace}
                     disabled={isTracing}
@@ -476,7 +450,7 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
                 )}
 
               {/* 代理检测按钮 - 只在查询用户自己的IP时显示 */}
-              {isAutoDetected && !isPrivateIP(currentData.ip) && (
+              {isAutoDetected && !isLocalAddress && (
                 <button
                   onClick={handleProxyDetection}
                   disabled={isProxyDetecting}
@@ -533,7 +507,6 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
               <div className="pl-6 md:pl-7 space-y-4 md:space-y-3">
                 <div className="flex items-center space-x-3">
                   <CountryFlagWithFallback
-                    ip={currentData.ip}
                     country={currentData.country}
                     countryCode={currentData.countryCode}
                     style={{
@@ -567,8 +540,8 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
                   </p>
                 )}
                 <div className="text-sm text-[rgb(var(--color-text-muted))] space-y-1">
-                  <p>纬度: {currentData.location.latitude.toFixed(4)}°</p>
-                  <p>经度: {currentData.location.longitude.toFixed(4)}°</p>
+                  <p>纬度: {currentData.location.latitude === null ? "未提供" : `${currentData.location.latitude.toFixed(4)}°`}</p>
+                  <p>经度: {currentData.location.longitude === null ? "未提供" : `${currentData.location.longitude.toFixed(4)}°`}</p>
                   {currentData.location.accuracy_radius && (
                     <p>精度半径: ~{currentData.location.accuracy_radius}km</p>
                   )}
@@ -852,7 +825,6 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
                     </div>
                     <div className="flex items-center space-x-2">
                       <CountryFlagWithFallback
-                        ip={currentData.ip}
                         country={currentData.country}
                         countryCode={currentData.registered_country.code}
                         style={{
@@ -905,7 +877,6 @@ export default function IPInfoCard({ ipData }: IPInfoCardProps) {
                     </div>
                     <div className="flex items-center space-x-2">
                       <CountryFlagWithFallback
-                        ip={currentData.ip}
                         country={currentData.country}
                         countryCode={currentData.countryCode}
                         style={{

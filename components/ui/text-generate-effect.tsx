@@ -1,6 +1,7 @@
 "use client";
-import { useEffect } from "react";
-import { motion, stagger, useAnimate } from "framer-motion";
+
+import { motion, useReducedMotion } from "framer-motion";
+import { Fragment } from "react";
 import { cn } from "@/lib/utils";
 
 export const TextGenerateEffect = ({
@@ -14,56 +15,28 @@ export const TextGenerateEffect = ({
   filter?: boolean;
   duration?: number;
 }) => {
-  const [scope, animate] = useAnimate();
-  // 确保words不为空，避免split方法出错
-  const safeWords = words || "";
-  const wordsArray = safeWords.split(" ");
-  useEffect(() => {
-    // 添加小延迟确保DOM元素已经渲染
-    const timer = setTimeout(() => {
-      animate(
-        "span",
-        {
-          opacity: 1,
-          filter: filter ? "blur(0px)" : "none",
-        },
-        {
-          duration: duration ? duration : 1,
-          delay: stagger(0.2),
-        }
-      );
-    }, 15);
-
-    return () => clearTimeout(timer);
-  }, [scope, animate, duration, filter, safeWords]); // 添加safeWords依赖，确保当IP地址变化时重新触发动画
-
-  const renderWords = () => {
-    return (
-      <motion.div ref={scope}>
-        {wordsArray.map((word, idx) => {
-          return (
-            <motion.span
-              key={`${safeWords}-${word}-${idx}`} // 使用更唯一的key确保重新渲染
-              className="dark:text-white text-black opacity-0"
-              style={{
-                filter: filter ? "blur(10px)" : "none",
-              }}
-            >
-              {word}{" "}
-            </motion.span>
-          );
-        })}
-      </motion.div>
-    );
-  };
+  const reducedMotion = useReducedMotion();
+  const wordsArray = words.split(" ");
 
   return (
-    <div className={cn("font-bold", className)}>
-      <div className="mt-4">
-        <div className=" dark:text-white text-black text-2xl leading-snug tracking-wide">
-          {renderWords()}
-        </div>
-      </div>
+    <div className={cn("font-bold leading-snug", className)}>
+      {wordsArray.map((word, index) => (
+        <Fragment key={`${words}-${index}`}>
+          {index > 0 ? " " : null}
+          <motion.span
+            initial={reducedMotion ? false : { opacity: 0, filter: filter ? "blur(10px)" : "none" }}
+            animate={{ opacity: 1, filter: "none" }}
+            transition={{ duration: reducedMotion ? 0 : duration, delay: reducedMotion ? 0 : index * 0.2 }}
+          >
+            {(word.match(/[^:]*:+|[^:]+$/g) || [word]).map((part, partIndex, parts) => (
+              <Fragment key={partIndex}>
+                <span className="inline-block">{part}</span>
+                {partIndex < parts.length - 1 ? <wbr /> : null}
+              </Fragment>
+            ))}
+          </motion.span>
+        </Fragment>
+      ))}
     </div>
   );
 };
