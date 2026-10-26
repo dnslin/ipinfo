@@ -3,7 +3,8 @@ import { detectIPVersion } from "./ip-detection";
 
 // 美团API响应接口定义
 interface MeituanIPResponse {
-  data: {
+  error?: { code: number; message: string };
+  data?: {
     lng: number;
     fromwhere: string;
     ip: string;
@@ -57,6 +58,7 @@ export class MeituanAPIService {
 
       const response = await fetch(url.toString(), {
         method: "GET",
+        signal: AbortSignal.timeout(8000),
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -71,6 +73,10 @@ export class MeituanAPIService {
       }
 
       const result: MeituanIPResponse = await response.json();
+
+      if (result.error) {
+        throw new Error(`美团未提供该 IP 的位置: ${result.error.message} (${result.error.code})`);
+      }
 
       if (!result.data) {
         throw new Error("美团API返回数据格式错误");
@@ -99,6 +105,7 @@ export class MeituanAPIService {
 
       const response = await fetch(url.toString(), {
         method: "GET",
+        signal: AbortSignal.timeout(8000),
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -126,11 +133,13 @@ export class MeituanAPIService {
   static async enhancedIPQuery(ip: string): Promise<IPInfo> {
     // 先获取IP的基础位置信息
     const ipInfo = await this.queryIPLocation(ip);
+    const { latitude, longitude } = ipInfo.location;
+    if (latitude === null || longitude === null) return ipInfo;
 
     // 然后查询详细地址信息
     const locationDetails = await this.queryLocationDetails(
-      ipInfo.location.latitude,
-      ipInfo.location.longitude
+      latitude,
+      longitude
     );
 
     if (locationDetails) {
@@ -148,8 +157,6 @@ export class MeituanAPIService {
         adcode: ipInfo.meituan?.adcode,
       };
 
-      // 更新地理位置精度
-      ipInfo.accuracy = "high";
     }
 
     return ipInfo;
@@ -160,7 +167,7 @@ export class MeituanAPIService {
    */
   private static convertToIPInfo(
     ip: string,
-    data: MeituanIPResponse["data"]
+    data: NonNullable<MeituanIPResponse["data"]>
   ): IPInfo {
     const ipVersion = detectIPVersion(ip);
 
@@ -172,8 +179,9 @@ export class MeituanAPIService {
       city: data.rgeo.city,
       district: data.rgeo.district,
       location: {
-        latitude: data.lat,
-        longitude: data.lng,
+        latitude: Number.isFinite(data.lat) ? data.lat : null,
+        longitude: Number.isFinite(data.lng) ? data.lng : null,
+        source: Number.isFinite(data.lat) && Number.isFinite(data.lng) ? "MeiTuan" : null,
       },
       accuracy: "medium",
       source: "MeiTuan",
