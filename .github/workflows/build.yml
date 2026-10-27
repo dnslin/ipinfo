@@ -4,6 +4,8 @@ on:
   push:
     branches: [master, main, develop]
     tags: ["v*"]
+  pull_request:
+    branches: [master, main, develop]
   workflow_dispatch:
 
 env:
@@ -47,9 +49,39 @@ jobs:
             exit 1
           fi
 
+  check:
+    name: Lint, Typecheck and Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 版本取自 package.json 的 packageManager（pnpm@11.25.0）
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test:unit
+
   build-and-push:
     name: Build and Push Docker
-    needs: validate
+    needs: [validate, check]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -63,6 +95,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -87,7 +120,8 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
-          push: true
+          # PR 只验证镜像能构建，不推送
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -97,6 +131,7 @@ jobs:
             NODE_ENV=production
 
       - name: Image summary
+        if: github.event_name != 'pull_request'
         run: |
           echo "## 🐳 Docker Image Built Successfully" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -120,9 +155,8 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 💾 数据持久化" >> $GITHUB_STEP_SUMMARY
-          echo "- 应用会自动初始化 \`/app/lib/data\` 目录" >> $GITHUB_STEP_SUMMARY
-          echo "- 如果挂载的目录为空，会复制默认数据" >> $GITHUB_STEP_SUMMARY
-          echo "- 如果目录有数据，会保留现有数据" >> $GITHUB_STEP_SUMMARY
+          echo "- 数据库不打进镜像，首次访问时自动下载到 \`/app/lib/data\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 挂载该目录可在重启后保留已下载的数据库" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "*Build completed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')*" >> $GITHUB_STEP_SUMMARY
 
