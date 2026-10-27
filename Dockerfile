@@ -17,6 +17,8 @@ FROM node:24-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+# Docker 会把 HOSTNAME 设为容器 ID，显式监听所有地址
+ENV HOSTNAME=0.0.0.0
 
 # 拷贝 standalone 产物和静态文件
 COPY --from=builder /app/.next/standalone ./
