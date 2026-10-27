@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guarded } from "@/lib/api-guard";
-import { describeFetchError } from "@/lib/network";
+import { describeFetchError, isFetchTimeout } from "@/lib/network";
 import { splitASName, type BGPPeer, type BGPPosition, type ProcessedBGPData } from "@/lib/bgp-api";
 
 interface RISNeighbour {
@@ -138,9 +138,9 @@ async function getNeighbours(
     });
   } catch (error) {
     console.error(`RIPEstat BGP 查询失败（AS${asnNumber}）: ${describeFetchError(error)}`);
-    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    const timedOut = isFetchTimeout(error);
     return NextResponse.json(
-      { error: timedOut ? "RIPEstat BGP 请求超时，请稍后重试" : `RIPEstat BGP 查询失败，请稍后重试（${describeFetchError(error)}）` },
+      { error: `${timedOut ? "RIPEstat BGP 请求超时" : "RIPEstat BGP 查询失败"}，请稍后重试（${describeFetchError(error)}）` },
       { status: timedOut ? 504 : 502 },
     );
   }

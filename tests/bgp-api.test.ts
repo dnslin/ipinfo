@@ -168,3 +168,15 @@ test("an upstream timeout is reported as a gateway timeout", async () => {
   assert.equal(response.status, 504);
   assert.match((await response.json()).error, /RIPEstat.*超时/);
 });
+
+test("IPv4 connection timeouts alongside unavailable IPv6 return 504 with the attempted address", async () => {
+  mock.method(globalThis, "fetch", async () => {
+    throw new TypeError("fetch failed", { cause: new AggregateError([
+      Object.assign(new Error("timed out"), { code: "ETIMEDOUT", address: "193.0.6.150", port: 443 }),
+      Object.assign(new Error("unreachable"), { code: "ENETUNREACH", address: "2001:67c:2e8:22::c100:696", port: 443 }),
+    ]) });
+  });
+  const response = await query();
+  assert.equal(response.status, 504);
+  assert.match((await response.json()).error, /超时.*ETIMEDOUT 193\.0\.6\.150:443/);
+});

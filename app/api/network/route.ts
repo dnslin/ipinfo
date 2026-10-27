@@ -15,8 +15,9 @@ async function lookup(request: NextRequest) {
     settle(fetchRouting(ip)),
     settle(fetchRegistration(ip)),
   ]);
+  const complete = ptr.ok && routing.ok && !routing.data?.rpkiError && registration.ok;
   return NextResponse.json({ ip, ptr, routing, registration }, {
-    headers: { "Cache-Control": "public, max-age=1800, s-maxage=1800" },
+    headers: { "Cache-Control": complete ? "public, max-age=1800, s-maxage=1800" : "no-store" },
   });
 }
 
