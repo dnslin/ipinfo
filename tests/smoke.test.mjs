@@ -159,3 +159,26 @@ test("proxy detection requires explicit enablement", async () => {
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "代理检测未启用" });
 });
+
+test("proxy API compares browser samples without substituting the server's exit", async () => {
+  const echo = await request("/api/proxy-detection", { headers: { "x-real-ip": "8.8.8.8" } });
+  assert.match(echo.headers.get("cache-control"), /private.*no-store/);
+  assert.equal((await echo.json()).proxyType, "unknown");
+  const response = await request("/api/proxy-detection", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-real-ip": "8.8.8.8" },
+    body: JSON.stringify({ enableProxyDetection: true, domesticIP: "8.8.8.8", foreignIP: "1.1.1.1" }),
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("cache-control"), /private.*no-store/);
+  const result = await response.json();
+  assert.equal(result.headerIP, "8.8.8.8");
+  assert.equal(result.proxyType, "foreign");
+});
+
+test("map route validates coordinates without requesting external tiles", async () => {
+  const response = await request("/api/map/1/2/0.png");
+  assert.equal(response.status, 400);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await response.json(), { error: "无效的地图瓦片坐标" });
+});

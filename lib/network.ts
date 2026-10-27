@@ -29,3 +29,13 @@ export function describeFetchError(error: unknown): string {
   });
   return `${error.message}: ${details.join(", ")}`;
 }
+
+// Node 将连接超时放在 fetch 的 cause 或 AggregateError 中，不能只检查最外层的错误名。
+export function isFetchTimeout(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === "TimeoutError" || error.name === "AbortError") return true;
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "ETIMEDOUT" || code === "ETIMEOUT" || code === "UND_ERR_CONNECT_TIMEOUT") return true;
+  if (error instanceof AggregateError && error.errors.some(isFetchTimeout)) return true;
+  return isFetchTimeout(error.cause);
+}

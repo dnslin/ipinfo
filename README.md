@@ -21,7 +21,7 @@
 - **命令行友好**：`curl` 首页只返回 IP，`curl host/8.8.8.8` 返回对齐的文本摘要，`/json` 返回 JSON。
 - **路由与注册信息**：反向解析（PTR）、BGP 前缀与 RPKI 验证状态、RDAP 注册信息与滥用举报邮箱。
 - **单域名双栈检测**：同时显示访客的 IPv4 和 IPv6 出口，服务器不需要 IPv6，也不需要额外的子域名。
-- **地图定位**：Leaflet + OpenStreetMap，按数据库给出的精度半径标出估算范围；没有坐标时明确说明原因。
+- **地图定位**：Leaflet + OpenStreetMap，底图由本站转发并缓存，浏览器无需直接访问跨境瓦片服务；按数据库精度半径标出估算范围，查询之间按距离飞行切换。
 - **BGP 邻接观测**：基于 RIPE RIS，按 AS 路径方向区分上游侧与下游侧，附网络名称、观测强度和关系图，可逐级查看邻居的邻接。
 - **补充检测**：可选的代理检测与 WebRTC 泄露检测，失败时保留原始结果，不用其他来源冒充。
 - **开箱即用的部署**：单个 Docker 镜像，数据库启动时自动下载、定期检查更新并持久化，自带健康检查，以非 root 用户运行。
@@ -92,10 +92,22 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 | `GEOIP_UPDATE_INTERVAL` | `24` | 检查数据库新版本的间隔（小时），`0` 关闭自动更新 |
 | `GEOIP_PRELOAD` | `1` | 启动时在后台下载并打开数据库；设为 `0` 改为首次查询时加载 |
 | `DNS_SERVERS` | 系统配置 | 域名查询与反向解析使用的 DNS 服务器，逗号分隔，例如 `223.5.5.5,1.1.1.1` |
+| `HTTP_PROXY` / `HTTPS_PROXY` | 无 | 服务器出站 HTTP/HTTPS 代理地址；Docker 镜像已启用 Node 24 原生代理支持 |
+| `NO_PROXY` | 无 | 不经过出站代理的主机；仓库 Compose 默认包含 `localhost,127.0.0.1,::1` |
 
 ### 出站连接
 
-BGP、RPKI、RDAP 与数据库更新需要服务器访问 RIPEstat、rdap.org 和 GitHub。Node 依次尝试域名的 IPv4/IPv6 地址时，默认每个地址只等 250 ms，跨洲线路（例如香港到 RIPE）上能连通的 IPv4 会被提前放弃，再落到不通的 IPv6 上，表现为 `fetch failed`。服务启动时会把这个间隔调到 2000 ms；如需其他值，可设置 `NODE_OPTIONS=--network-family-autoselection-attempt-timeout=<毫秒>`。外部请求失败时，日志和接口错误会列出每个尝试过的地址及原因，例如 `ETIMEDOUT 193.0.6.150:443`。
+BGP、RPKI、RDAP、地图底图与数据库更新需要服务器访问 RIPEstat、rdap.org、OpenStreetMap 和 GitHub。日志中的 `ETIMEDOUT` 表示对应地址连接超时，`ENETUNREACH` 表示服务器没有到该地址的路由。若 IPv4 超时和 IPv6 不可达同时出现，仅关闭 IPv6 无法保证恢复，需要检查服务器出站连通性，或使用部署环境提供的 HTTP 代理。
+
+Docker 镜像通过 `NODE_USE_ENV_PROXY=1` 启用 [Node.js 原生代理支持](https://nodejs.org/learn/http/enterprise-network-configuration)。配置 `HTTPS_PROXY` 后，外部 HTTPS 请求及重定向会经过该代理，`NO_PROXY` 指定的主机除外。仓库 Compose 会传入宿主环境中的这三个变量。代理地址必须能从容器内访问，容器中的 `127.0.0.1` 指向容器自身。从源码运行时需在启动进程前设置 `NODE_USE_ENV_PROXY=1`。
+
+服务启动时把 Node 双栈地址尝试间隔从默认 250 ms 调到 2000 ms，减少慢线路被过早放弃的情况；这无法修复本身不通的网络。如需其他间隔，可设置 `NODE_OPTIONS=--network-family-autoselection-attempt-timeout=<毫秒>`。日志和接口错误保留每个尝试地址及原因，网络信息或 RPKI 查询失败的响应不会缓存 30 分钟。
+
+地图仅转发当前视图请求的 OSM 瓦片，并按上游缓存头缓存到 `.next/cache/map-tiles`，过期后通过 ETag / Last-Modified 验证。缓存随访问地点增长，目前不会自动清理；可在磁盘不足时清理，未挂载为持久卷时随容器重建清空。地图仍保留 OSM 署名，版权链接只在点击时访问。服务器需能访问 OSM；此方案不能保证所有大陆网络的加载速度。
+
+### 代理检测
+
+检测由浏览器请求本站、国内和国外探测源，再比较同一 IP 协议下的出口地址。服务器不会使用自己的出口代替访客采样；跨协议、探测失败或采样不完整时显示“暂无法判断”。“未发现出口差异”不能排除全局代理，出口不同也可能来自分流或网络出口变化，不能据此判断代理所在国家。
 
 ### 自建双栈探测入口
 
@@ -131,7 +143,8 @@ curl ip.example.com/example.com/json
 | `/api/query` | POST | 查询指定 IP 或域名 `{"ip": "8.8.8.8"}`；批量查询 `{"ips": ["8.8.8.8", "example.com"]}`，最多 100 条 |
 | `/api/network?ip=` | GET | 反向解析、BGP 前缀与 RPKI、RDAP 注册信息，三项分别返回成功或失败 |
 | `/api/bgp/{asn}` | GET | ASN 的 BGP 邻接观测，含方向、观测强度和网络名称 |
-| `/api/proxy-detection` | POST | 代理检测，请求体需包含 `"enableProxyDetection": true` |
+| `/api/proxy-detection` | GET / POST | GET 回显当前连接，缺少浏览器采样时无法判断；POST 比较浏览器提交的 `domesticIP`、`foreignIP`，需包含 `"enableProxyDetection": true` |
+| `/api/map/{z}/{x}/{y}.png` | GET | 同源 OSM 底图，服务器与浏览器按上游缓存规则复用 |
 | `/api/health` | GET | 健康检查：数据库版本、构建日期与更新状态；City 库不可用时返回 503 |
 | `/api/init` | GET / POST | 查看数据库状态 / 补齐缺失的数据库；`{"update": true}` 立即检查更新（需要 `API_TOKEN`） |
 
@@ -158,7 +171,7 @@ curl -s -X POST http://localhost:3000/api/init \
 | BGP 邻接 | [RIPEstat asn-neighbours](https://stat.ripe.net/docs/data-api/api-endpoints/asn-neighbours) | RIS 路由观测 |
 | 前缀与 RPKI | RIPEstat `network-info`、`rpki-validation` | IP 所在的宣告前缀、起源 AS 与 ROA 验证 |
 | 注册信息 | [RDAP](https://about.rdap.org/)（经 rdap.org 跳转到对应 RIR） | 网段名称、所属机构、滥用举报邮箱 |
-| 地图底图 | [OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/) | 浏览器按视图加载，保留署名 |
+| 地图底图 | [OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/) | 本站按视图转发并缓存，保留署名 |
 
 数据库保存在 `lib/data/`，缺失或损坏时自动下载。服务每隔 `GEOIP_UPDATE_INTERVAL` 小时比较一次 GitHub Release 的版本标签，标签变化才下载，新文件校验通过且构建时间不早于当前文件时原子替换，并重新打开数据库、清空查询缓存；下载失败时继续使用旧文件。版本记录在 `lib/data/versions.json`，页脚会显示各库的构建日期。只有 City 库是必需的，ASN 和 GeoCN 不可用时基础查询照常工作。GeoCN 只补充地区和运营商，地图坐标始终使用 MaxMind 的数据，不会根据地名推算坐标。
 

@@ -1,4 +1,4 @@
-import { describeFetchError } from "./network";
+import { describeFetchError, isFetchTimeout } from "./network";
 
 // 公网 IP 的路由与注册信息：BGP 前缀与 RPKI 来自 RIPEstat，注册信息来自 RDAP（经 rdap.org 跳转到对应的 RIR）。
 
@@ -8,7 +8,7 @@ export interface RoutingInfo {
   prefix: string;
   originAsns: number[];
   rpki: { status: RPKIStatus; roas: { origin: number; prefix: string; maxLength: number }[] } | null;
-  rpkiError?: boolean;
+  rpkiError?: string;
 }
 
 export interface RegistrationInfo {
@@ -72,8 +72,8 @@ export async function fetchRouting(ip: string): Promise<RoutingInfo | null> {
     const key = `AS${routing.originAsns[0]}:${routing.prefix}`;
     const rpki = await cached(`rpki:${key}`, () => getJSON(`${RIPESTAT}/rpki-validation/data.json?resource=AS${routing.originAsns[0]}&prefix=${encodeURIComponent(routing.prefix)}&sourceapp=ipinfo`, 10_000));
     return parseRouting(info, rpki);
-  } catch {
-    return { ...routing, rpkiError: true };
+  } catch (error) {
+    return { ...routing, rpkiError: describeFetchError(error) };
   }
 }
 
@@ -133,7 +133,7 @@ export async function settle<T>(task: Promise<T>): Promise<Section<T>> {
   try {
     return { ok: true, data: await task };
   } catch (error) {
-    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError" || (error as NodeJS.ErrnoException).code === "ETIMEOUT");
-    return { ok: false, error: timedOut ? "查询超时" : error instanceof Error ? describeFetchError(error) : "查询失败" };
+    const detail = describeFetchError(error);
+    return { ok: false, error: isFetchTimeout(error) ? `查询超时（${detail}）` : detail };
   }
 }

@@ -1,84 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import { detectProxy, ProxyDetectionResult } from "@/lib/ip-detection";
+import { detectProxy, normalizePublicIP } from "@/lib/ip-detection";
 import { guarded } from "@/lib/api-guard";
 
-/**
- * 代理检测API路由
- * GET请求：检测当前客户端的代理使用情况
- */
-async function detect(request: NextRequest) {
-  try {
-    console.log("开始代理检测...");
-    
-    // 执行代理检测
-    const result: ProxyDetectionResult = await detectProxy(request);
-    
-    console.log("代理检测完成:", {
-      headerIP: result.headerIP,
-      domesticIP: result.domesticIP,
-      foreignIP: result.foreignIP,
-      proxyType: result.proxyType,
-      confidence: result.confidence,
-      detectionTime: result.detectionTime,
-      errorCount: result.errors.length,
-    });
+const headers = { "Cache-Control": "private, no-store" };
 
-    return NextResponse.json(result, {
-      headers: {
-        "Cache-Control": "public, max-age=60, s-maxage=60", // 缓存1分钟
-      },
-    });
-  } catch (error) {
-    console.error("代理检测失败:", error);
-    
-    // 返回错误信息，但保持API结构一致
-    const errorResult: ProxyDetectionResult = {
-      headerIP: null,
-      domesticIP: null,
-      foreignIP: null,
-      isUsingProxy: false,
-      proxyType: 'unknown',
-      confidence: 0,
-      errors: [error instanceof Error ? error.message : "代理检测失败"],
-      detectionTime: 0,
-    };
-
-    return NextResponse.json(errorResult, {
-      status: 500,
-    });
-  }
+// GET 仅回显本站看到的连接，服务器不能代替浏览器采样出口。
+function detect(request: NextRequest) {
+  return NextResponse.json(detectProxy(request), { headers });
 }
 
-/**
- * POST请求：检测指定IP的代理情况（可选功能）
- */
+// 国内和国外探测必须在访问者的浏览器中执行；这里只比较提交的观察结果。
 async function detectEnabled(request: NextRequest) {
+  let body: unknown;
   try {
-    const body = await request.json();
-    const { enableProxyDetection } = body;
-
-    if (!enableProxyDetection) {
-      return NextResponse.json(
-        { error: "代理检测未启用" },
-        { status: 400 }
-      );
-    }
-
-    // 执行代理检测
-    const result: ProxyDetectionResult = await detectProxy(request);
-
-    return NextResponse.json(result, {
-      headers: {
-        "Cache-Control": "public, max-age=60, s-maxage=60",
-      },
-    });
-  } catch (error) {
-    console.error("代理检测POST请求失败:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "代理检测失败" },
-      { status: 500 }
-    );
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "请求体必须是有效 JSON" }, { status: 400, headers });
   }
+  if (!body || typeof body !== "object" || !("enableProxyDetection" in body) || body.enableProxyDetection !== true) {
+    return NextResponse.json({ error: "代理检测未启用" }, { status: 400, headers });
+  }
+  const input = body as Record<string, unknown>;
+  const samples = {
+    domesticIP: normalizePublicIP(input.domesticIP),
+    foreignIP: normalizePublicIP(input.foreignIP),
+  };
+  for (const field of ["domesticIP", "foreignIP"] as const) {
+    if (input[field] != null && !samples[field]) {
+      return NextResponse.json({ error: `${field} 必须是有效公网 IP 或 null` }, { status: 400, headers });
+    }
+  }
+  return NextResponse.json(detectProxy(request, samples), { headers });
 }
 
 export const GET = guarded(detect, 3);

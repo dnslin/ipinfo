@@ -83,13 +83,13 @@ test("automatic public results retain proxy detection and its diagnostic details
     const html = renderToStaticMarkup(createElement(IPInfoCard, { ipData: {
       ...ipData, proxyDetection: {
         headerIP: "1.1.1.1", domesticIP: null, foreignIP: "1.1.1.1",
-        isUsingProxy: false, proxyType: "direct", confidence: 0.9,
+        isUsingProxy: false, proxyType: "unknown", confidence: 0,
         errors: ["国内探测源超时"], detectionTime: 1000,
       },
     } }));
     assert.match(html, /当前连接 IP/);
     assert.match(html, />代理检测<\/button>/);
-    for (const detail of ["请求来源", "国内探测源", "国外探测源", "置信度 90%", "国内探测源超时", "1000"]) {
+    for (const detail of ["请求来源", "国内探测源", "国外探测源", "暂无法判断", "出口一致也不能排除全局代理", "国内探测源超时", "1000"]) {
       assert.ok(html.replace(/<[^>]*>/g, "").includes(detail), `proxy results retain ${detail}`);
     }
   } finally { initial.isAutoDetected = wasAutoDetected; }

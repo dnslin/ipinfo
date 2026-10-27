@@ -71,7 +71,7 @@ export function NetworkIntelSections({ ip }: { ip: string }) {
               <Row label="起源 AS" mono>{routing.originAsns.length ? routing.originAsns.map((asn) => `AS${asn}`).join(", ") : "未观测到"}</Row>
               <Row label="RPKI">
                 {rpki ? <span className="intel-badge" data-tone={rpki.tone}>{rpki.text}</span>
-                  : routing.rpkiError ? <span className="intel-error">RPKI 验证查询失败</span> : <span className="intel-muted">无法判定</span>}
+                  : routing.rpkiError ? <span className="intel-error">RPKI 验证查询失败（{routing.rpkiError}）</span> : <span className="intel-muted">无法判定</span>}
                 {routing.originAsns.length > 1 && <span className="intel-muted intel-note">多起源前缀，按 AS{routing.originAsns[0]} 判定</span>}
               </Row>
             </>
