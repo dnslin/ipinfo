@@ -260,8 +260,6 @@ html.theme-changing *::after { transition: none !important; }
 .icon-swap > svg:last-child { opacity: 0; transform: scale(.6); }
 .icon-swap[data-done] > svg:first-child { opacity: 0; transform: scale(.6); }
 .icon-swap[data-done] > svg:last-child { opacity: 1; transform: scale(1); }
-.id-message { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgb(var(--color-border-light)); font-size: 13px; color: rgb(var(--color-text-secondary)); }
-.id-message[data-error] { color: rgb(var(--color-error)); }
 .id-empty-title { margin-top: 12px; font-size: 26px; font-weight: 650; letter-spacing: -.02em; }
 .id-empty-text { margin-top: 8px; font-size: 14px; color: rgb(var(--color-text-secondary)); }
 .id-card-loading { display: grid; gap: 14px; }
