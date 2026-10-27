@@ -1,3 +1,4 @@
+import { singleton } from "../singleton";
 import { databaseDownloader, type DatabaseStatus } from "./downloader";
 import { geoIPReader } from "./reader";
 import { globalIPCache } from "./cache";
@@ -71,4 +72,4 @@ export class StartupCheckService {
   }
 }
 
-export const startupCheckService = new StartupCheckService();
+export const startupCheckService = singleton("startupCheck", () => new StartupCheckService());

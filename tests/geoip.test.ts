@@ -12,6 +12,9 @@ import { GeoIPReader, geoIPReader } from "../lib/geoip/reader";
 import { StartupCheckService, startupCheckService } from "../lib/geoip/startup-check";
 import { POST as initializeDatabase } from "../app/api/init/route";
 import type { RawQueryResult } from "../lib/geoip/types";
+import { NextRequest } from "next/server";
+
+const initRequest = () => new NextRequest("http://localhost/api/init", { method: "POST" });
 
 function maxmind(city: Record<string, unknown>): RawQueryResult {
   return {
@@ -134,7 +137,9 @@ test("concurrent cold starts share downloads and retain a usable City database w
   const directory = mkdtempSync(join(tmpdir(), "ipinfo-db-test-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const urls: string[] = [];
-  t.mock.method(globalThis, "fetch", async (url: string) => {
+  t.mock.method(globalThis, "fetch", async (url: string, init?: RequestInit) => {
+    // 先用 HEAD 解析发布标签；这里不返回跳转，下载回退到 latest 地址。
+    if (init?.method === "HEAD") return new Response(null, { status: 200 });
     urls.push(String(url));
     await new Promise((resolve) => setTimeout(resolve, 10));
     return String(url).endsWith("/GeoLite2-City.mmdb")
@@ -155,6 +160,54 @@ test("concurrent cold starts share downloads and retain a usable City database w
   assert.equal(statuses.filter((db) => !db.isValid).length, 2);
 });
 
+test("update checks compare release tags and only replace a database with a newer valid build", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "ipinfo-update-test-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  for (const name of ["GeoLite2-City.mmdb", "GeoLite2-ASN.mmdb", "GeoCN.mmdb"]) writeFileSync(join(directory, name), tinyMMDB);
+  writeFileSync(join(directory, "versions.json"), JSON.stringify({
+    "GeoLite2-ASN.mmdb": { source: "https://github.com/P3TERX/GeoLite.mmdb/releases/download/2026.10.25/GeoLite2-ASN.mmdb", updatedAt: "" },
+  }));
+  const downloads: string[] = [];
+  t.mock.method(globalThis, "fetch", async (url: string, init?: RequestInit) => {
+    if (init?.method === "HEAD") {
+      const file = String(url).split("/").pop()!;
+      // GeoCN 的跳转不可用时跳过，不盲目下载
+      if (file === "GeoCN.mmdb") return new Response(null, { status: 200 });
+      return new Response(null, { status: 302, headers: { location: `https://github.com/P3TERX/GeoLite.mmdb/releases/download/2026.10.25/${file}` } });
+    }
+    downloads.push(String(url));
+    return new Response(tinyMMDB);
+  });
+
+  const downloader = new DatabaseDownloader(directory);
+  const results = Object.fromEntries((await downloader.checkForUpdates()).map((result) => [result.name, result]));
+  assert.equal(results["GeoLite2-ASN.mmdb"].outcome, "current");
+  assert.equal(results["GeoCN.mmdb"].outcome, "skipped");
+  assert.equal(results["GeoLite2-City.mmdb"].outcome, "updated");
+  assert.equal(results["GeoLite2-City.mmdb"].version, "2026.10.25");
+  assert.deepEqual(downloads, ["https://github.com/P3TERX/GeoLite.mmdb/releases/download/2026.10.25/GeoLite2-City.mmdb"]);
+  const city = (await downloader.checkDatabases()).find((database) => database.name === "GeoLite2-City.mmdb");
+  assert.equal(city?.version, "2026.10.25");
+
+  // 再次检查时版本未变，不再下载
+  downloads.length = 0;
+  assert.ok((await downloader.checkForUpdates()).every((result) => result.outcome !== "updated"));
+  assert.deepEqual(downloads, []);
+});
+
+test("a failed update download keeps the existing database", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "ipinfo-update-test-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  writeFileSync(join(directory, "GeoLite2-City.mmdb"), tinyMMDB);
+  t.mock.method(globalThis, "fetch", async (url: string, init?: RequestInit) => init?.method === "HEAD"
+    ? new Response(null, { status: 302, headers: { location: `${String(url).replace("latest/download", "download/v2")}` } })
+    : new Response("not a database"));
+  const downloader = new DatabaseDownloader(directory);
+  const city = (await downloader.checkForUpdates()).find((result) => result.name === "GeoLite2-City.mmdb");
+  assert.equal(city?.outcome, "failed");
+  assert.equal((await downloader.checkDatabases()).find((database) => database.name === "GeoLite2-City.mmdb")?.isValid, true);
+});
+
 function databaseStatuses(validNames: string[]): DatabaseStatus[] {
   return ["GeoLite2-City.mmdb", "GeoLite2-ASN.mmdb", "GeoCN.mmdb"].map((name) => ({
     name, exists: validNames.includes(name), size: 100, lastModified: null, isValid: validNames.includes(name),
@@ -168,7 +221,7 @@ test("initialization API reports unavailable databases as a failure and preserve
   t.mock.method(databaseDownloader, "downloadMissingDatabases", async () => { throw new Error("upstream HTTP 503"); });
   t.mock.method(geoIPReader, "refresh", async () => { throw new Error("upstream HTTP 503"); });
 
-  const response = await initializeDatabase();
+  const response = await initializeDatabase(initRequest());
   const body = await response.json();
   assert.equal(response.status, 503);
   assert.equal(body.success, false);
@@ -270,10 +323,10 @@ test("POST initialization refreshes cached service results after missing supplem
   t.after(() => { geoIPReader.destroy(); startupCheckService.reset(); globalIPCache.clear(); });
   const service = new GeoIPService();
 
-  assert.equal((await initializeDatabase()).status, 200);
+  assert.equal((await initializeDatabase(initRequest())).status, 200);
   assert.equal((await service.queryIPInfo("8.8.8.8")).as, undefined);
   asnAvailable = true;
-  assert.equal((await initializeDatabase()).status, 200);
+  assert.equal((await initializeDatabase(initRequest())).status, 200);
   assert.equal((await service.queryIPInfo("8.8.8.8")).as?.number, 15169);
 });
 
@@ -288,7 +341,7 @@ test("failed POST initialization preserves usable cached query results", async (
   t.mock.method(databaseDownloader, "checkDatabases", async () => databaseStatuses([]));
   t.mock.method(geoIPReader, "refresh", async () => { throw new Error("upstream unavailable"); });
 
-  assert.equal((await initializeDatabase()).status, 503);
+  assert.equal((await initializeDatabase(initRequest())).status, 503);
   assert.deepEqual(await service.queryIPInfo("8.8.8.8"), cached);
   assert.equal(globalIPCache.get("8.8.8.8")?.as?.number, 15169);
 });

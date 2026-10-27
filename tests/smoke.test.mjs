@@ -25,7 +25,7 @@ before(async () => {
   await cp("public", ".next/standalone/public", { recursive: true });
   await cp(".next/static", ".next/standalone/.next/static", { recursive: true });
   server = spawn(process.execPath, [resolve(".next/standalone/server.js")], {
-    env: { ...process.env, HOSTNAME: "127.0.0.1", PORT: String(port) },
+    env: { ...process.env, HOSTNAME: "127.0.0.1", PORT: String(port), GEOIP_PRELOAD: "0", GEOIP_UPDATE_INTERVAL: "0" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   await new Promise((resolve, reject) => {
@@ -112,7 +112,7 @@ test("IP query rejects invalid input and keeps API proxy headers", async () => {
   assert.equal(response.status, 400);
   assert.equal(response.headers.get("access-control-allow-origin"), "*");
   assert.match(response.headers.get("cache-control"), /private.*no-store/);
-  assert.deepEqual(await response.json(), { error: "无效的IP地址格式" });
+  assert.deepEqual(await response.json(), { error: "无效的 IP 地址或域名", code: "INVALID_TARGET" });
 });
 
 test("async ASN route parameters are validated before external requests", async () => {
@@ -121,6 +121,33 @@ test("async ASN route parameters are validated before external requests", async 
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), { error: "无效的 ASN 编号" });
   }
+});
+
+test("health check reports database state without downloading", async () => {
+  const response = await request("/api/health");
+  assert.ok([200, 503].includes(response.status));
+  const body = await response.json();
+  assert.ok(["ok", "degraded", "starting", "down"].includes(body.status));
+  assert.equal(body.databases.length, 3);
+  assert.equal(body.update.intervalHours, 0);
+});
+
+test("curl gets plain text from the homepage and shortcuts while browsers get HTML", async () => {
+  const plain = await request("/", { headers: { "user-agent": "curl/8.7.1", "x-real-ip": "203.0.113.9" } });
+  assert.equal(plain.status, 200);
+  assert.match(plain.headers.get("content-type"), /text\/plain/);
+  assert.equal(await plain.text(), "203.0.113.9\n");
+  const page = await request("/", { headers: { "user-agent": "Mozilla/5.0" } });
+  assert.match(page.headers.get("content-type"), /text\/html/);
+  const redirect = await request("/1.1.1.1", { headers: { "user-agent": "Mozilla/5.0" }, redirect: "manual" });
+  assert.equal(redirect.status, 307);
+  assert.match(redirect.headers.get("location"), /\/\?q=1\.1\.1\.1$/);
+});
+
+test("batch page is served", async () => {
+  const response = await request("/batch");
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /批量查询/);
 });
 
 test("proxy detection requires explicit enablement", async () => {

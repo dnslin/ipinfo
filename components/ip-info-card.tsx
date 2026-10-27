@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import ReactCountryFlag from "react-country-flag";
-import { Activity, Check, Copy, Globe2, Loader2, RotateCcw, Search, Shield } from "lucide-react";
+import { Activity, Check, Copy, Globe2, Loader2, Radio, RotateCcw, Search, Shield } from "lucide-react";
 import type { LatLngTuple } from "leaflet";
 import { toast } from "sonner";
 import { type IPInfo, useIPQueryStore } from "@/lib/store";
@@ -15,6 +15,9 @@ import { ResultStage } from "./result-stage";
 import { useSetMapFocus } from "./map-focus";
 import BGPPeersDialog from "./bgp-peers-dialog";
 import { StackSummary } from "./version-switcher";
+import { NetworkIntelSections } from "./network-intel";
+import { WebRTCSummary } from "./webrtc-result";
+import { classifyWebRTC, gatherCandidates, type WebRTCResult } from "@/lib/webrtc";
 
 function CountryMark({ code, country }: { code: string; country: string }) {
   const [failedCode, setFailedCode] = useState<string | null>(null);
@@ -23,8 +26,39 @@ function CountryMark({ code, country }: { code: string; country: string }) {
   return <ReactCountryFlag countryCode={code} svg title={country} style={{ width: "1.15em", height: "1.15em", borderRadius: 3 }} onError={() => setFailedCode(code)} />;
 }
 
+const RESOLVED_VISIBLE = 12;
+
+// 按域名查询时列出全部解析地址，点击切换，切换后仍保留这份解析结果。
+function ResolvedAddresses({ resolved, current }: { resolved: NonNullable<IPInfo["resolvedFrom"]>; current: string }) {
+  const { isLoading, executeQuery } = useIPQueryStore();
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? resolved.addresses : resolved.addresses.slice(0, RESOLVED_VISIBLE);
+  return (
+    <div className="id-resolved">
+      <p className="id-resolved-title"><span className="font-mono">{resolved.domain}</span> 解析到 {resolved.addresses.length} 个公网地址</p>
+      {resolved.addresses.length > 1 && (
+        <ul className="id-resolved-list">
+          {visible.map((address) => (
+            <li key={address}>
+              <button type="button" className="font-mono" aria-current={address === current || undefined} disabled={address === current || isLoading}
+                onClick={() => executeQuery(address, { resolvedFrom: resolved })} title={address === current ? "当前显示的地址" : `查看 ${address}`}>
+                {address}
+              </button>
+            </li>
+          ))}
+          {!expanded && resolved.addresses.length > RESOLVED_VISIBLE && (
+            <li><button type="button" onClick={() => setExpanded(true)}>另外 {resolved.addresses.length - RESOLVED_VISIBLE} 个</button></li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function IPInfoCard({ ipData }: { ipData: IPInfo }) {
-  const { isProxyDetecting, executeProxyDetection, isAutoDetected } = useIPQueryStore();
+  const { isProxyDetecting, executeProxyDetection, isAutoDetected, stack } = useIPQueryStore();
+  const [webrtc, setWebRTC] = useState<WebRTCResult | null>(null);
+  const [isCheckingWebRTC, setCheckingWebRTC] = useState(false);
   const [tracedData, setTracedData] = useState<IPInfo | null>(null);
   const [isTracing, setIsTracing] = useState(false);
   const [traceMessage, setTraceMessage] = useState<{ error: boolean; text: string } | null>(null);
@@ -72,6 +106,19 @@ export default function IPInfoCard({ ipData }: { ipData: IPInfo }) {
     }
   };
 
+  const checkWebRTC = async () => {
+    if (isCheckingWebRTC) return;
+    setCheckingWebRTC(true);
+    try {
+      const candidates = await gatherCandidates();
+      setWebRTC(candidates ? classifyWebRTC(candidates, [ipData.ip, stack.IPv4, stack.IPv6]) : { status: "unsupported", publicIPs: [], localIPs: [], mdnsHidden: false, leakedIPs: [] });
+    } catch (error) {
+      toast.error("WebRTC 检测失败", { description: error instanceof Error ? error.message : "无法建立 WebRTC 连接" });
+    } finally {
+      setCheckingWebRTC(false);
+    }
+  };
+
   const copyIP = async () => {
     try {
       await navigator.clipboard.writeText(ipData.ip);
@@ -95,6 +142,7 @@ export default function IPInfoCard({ ipData }: { ipData: IPInfo }) {
           <h2 className="id-ip" style={{ "--ip-chars": ipData.ip.length } as CSSProperties}><IPAddress value={ipData.ip} /></h2>
           <p className="id-place"><CountryMark code={currentData.countryCode} country={currentData.country} /><span>{isLocalAddress ? "本地网络" : place || "地区信息未提供"}</span></p>
           <p className="id-source">{isLocalAddress ? sourceName : `位置来源 · ${sourceName}`}</p>
+          {ipData.resolvedFrom && <ResolvedAddresses resolved={ipData.resolvedFrom} current={ipData.ip} />}
           {isAutoDetected && <StackSummary />}
           <div className="id-actions">
             <button type="button" onClick={copyIP} className="id-button id-button-primary" aria-label={copied ? "IP 地址已复制" : "复制 IP 地址"}>
@@ -103,6 +151,7 @@ export default function IPInfoCard({ ipData }: { ipData: IPInfo }) {
             {!isLocalAddress && currentData.source !== "MeiTuan" && <button type="button" disabled={isTracing} onClick={trace} className="id-button">{isTracing ? <Loader2 className="animate-spin" /> : <Search />}{isTracing ? "正在查询" : "美团溯源"}</button>}
             {tracedData && <button type="button" onClick={() => { setTracedData(null); setTraceMessage(null); }} className="id-button"><RotateCcw />恢复原始结果</button>}
             {isAutoDetected && !isLocalAddress && <button type="button" disabled={isProxyDetecting} onClick={executeProxyDetection} className="id-button">{isProxyDetecting ? <Loader2 className="animate-spin" /> : <Activity />}{isProxyDetecting ? "检测中" : "代理检测"}</button>}
+            {isAutoDetected && !isLocalAddress && <button type="button" disabled={isCheckingWebRTC} onClick={checkWebRTC} className="id-button">{isCheckingWebRTC ? <Loader2 className="animate-spin" /> : <Radio />}{isCheckingWebRTC ? "检测中" : "WebRTC 检测"}</button>}
           </div>
           {traceMessage && <p role={traceMessage.error ? "alert" : "status"} className="id-message" data-error={traceMessage.error || undefined}>{traceMessage.text}</p>}
         </section>
@@ -111,10 +160,12 @@ export default function IPInfoCard({ ipData }: { ipData: IPInfo }) {
       <div className="site-body">
         <StatStrip data={currentData} onOpenBGP={(asn, name, trigger) => setSelectedASN({ asn, name, trigger })} />
         {isAutoDetected && currentData.proxyDetection && <ProxyDetectionSummary result={currentData.proxyDetection} />}
+        {isAutoDetected && webrtc && <WebRTCSummary result={webrtc} />}
         <div className="detail-grid">
           <LocationDetails data={currentData} />
           <NetworkDetails data={currentData} sourceName={sourceName} />
         </div>
+        {!isLocalAddress && <NetworkIntelSections ip={ipData.ip} />}
       </div>
       {selectedASN && <BGPPeersDialog asn={selectedASN.asn} asnName={selectedASN.name} isOpen onClose={() => setSelectedASN(null)} onReturnFocus={() => selectedASN.trigger.focus({ preventScroll: true })} />}
     </>

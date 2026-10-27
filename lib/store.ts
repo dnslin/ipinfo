@@ -43,6 +43,11 @@ export interface IPInfo {
   ipVersion: "IPv4" | "IPv6";
   // 代理检测信息
   proxyDetection?: ProxyDetectionResult;
+  // 按域名查询时的解析结果：查询的是 addresses 中的一个
+  resolvedFrom?: {
+    domain: string;
+    addresses: string[];
+  };
   // 美团特有字段
   meituan?: {
     areaName?: string; // 区域名称，如"王府井/东单"
@@ -56,6 +61,30 @@ export interface IPInfo {
     fromwhere?: string; // 数据来源标识
     adcode?: string; // 行政区划代码
   };
+}
+
+export interface QueryOptions {
+  // 查询的是访客自己的连接地址（来自双栈检测），而不是手动输入
+  auto?: boolean;
+  // 地址栏同步方式：push 记入浏览历史，replace 只替换当前地址，false 不改动（例如响应前进后退）
+  history?: "push" | "replace" | false;
+  // 在同一域名的多个解析地址之间切换时保留解析结果
+  resolvedFrom?: IPInfo["resolvedFrom"];
+}
+
+// 把查询目标写进地址栏，结果可以直接分享；查询自己的 IP 时去掉参数。
+function syncURL(target: string | undefined, mode: QueryOptions["history"]) {
+  if (typeof window === "undefined" || !mode) return;
+  const url = new URL(window.location.href);
+  if (target) url.searchParams.set("q", target);
+  else url.searchParams.delete("q");
+  if (url.href === window.location.href) return;
+  window.history[mode === "push" ? "pushState" : "replaceState"](null, "", url);
+}
+
+export function readURLQuery(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  return new URLSearchParams(window.location.search).get("q")?.trim() || undefined;
 }
 
 // 访客双栈地址：undefined 为检测中，null 为该协议不可用
@@ -77,8 +106,7 @@ interface IPQueryState {
 
   // 动作
   setQuery: (query: string) => void;
-  // auto 表示查询的是访客自己的连接地址（来自双栈检测），而不是手动输入。
-  executeQuery: (ip?: string, options?: { auto?: boolean }) => Promise<void>;
+  executeQuery: (target?: string, options?: QueryOptions) => Promise<void>;
   detectStack: () => Promise<ConnectionStack>;
   executeProxyDetection: () => Promise<void>;
   clearError: () => void;
@@ -105,7 +133,7 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
   setQuery: (query: string) => set({ currentQuery: query }),
 
   // 执行IP查询
-  executeQuery: async (ip?: string, options?: { auto?: boolean }) => {
+  executeQuery: async (ip?: string, options?: QueryOptions) => {
     queryController?.abort();
     const controller = new AbortController();
     queryController = controller;
@@ -141,14 +169,18 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
         throw new Error(result.error || `查询失败: ${response.status} ${response.statusText}`);
       }
 
-      const result: IPInfo = await response.json();
+      const payload: IPInfo = await response.json();
       if (controller.signal.aborted) return;
+      const resolvedFrom = payload.resolvedFrom ?? (options?.resolvedFrom?.addresses.includes(payload.ip) ? options.resolvedFrom : undefined);
+      const result: IPInfo = resolvedFrom ? { ...payload, resolvedFrom } : payload;
+      const auto = !queryIP || Boolean(options?.auto);
+      syncURL(auto ? undefined : queryIP, options?.history ?? "push");
 
       set({
         ipData: result,
         error: null, // 确保清除错误状态
-        isAutoDetected: !queryIP || Boolean(options?.auto),
-        currentQuery: result.ip,
+        isAutoDetected: auto,
+        currentQuery: queryIP && !auto ? queryIP : result.ip,
       });
 
       // 显示成功提示

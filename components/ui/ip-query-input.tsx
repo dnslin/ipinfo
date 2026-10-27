@@ -21,8 +21,8 @@ export function IPQueryInput({ value, disabled, invalid, onChange, onSubmit, onL
         ref={inputRef} value={value} onChange={onChange} disabled={disabled}
         onKeyDown={(event) => { if (event.key === "Escape" && onEscape) { event.preventDefault(); onEscape(); } }}
         type="text" autoComplete="off" autoCapitalize="none" spellCheck={false}
-        aria-label="IP 地址，留空查询我的 IP" aria-invalid={invalid || undefined} aria-keyshortcuts="/"
-        placeholder="输入 IPv4 或 IPv6 地址"
+        aria-label="IP 地址或域名，留空查询我的 IP" aria-invalid={invalid || undefined} aria-keyshortcuts="/"
+        placeholder="输入 IP 地址或域名"
         className="query-field"
       />
       {!value && <kbd className="query-kbd" aria-hidden="true">/</kbd>}
