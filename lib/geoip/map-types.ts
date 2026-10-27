@@ -1,6 +1,5 @@
 // 地图组件专用类型定义
 
-import type { LatLngTuple } from "leaflet";
 import type { IPInfo } from "../store";
 
 // 地图主题类型
@@ -27,42 +26,6 @@ export const MAP_TILE_PROVIDERS: Record<MapTheme, TileProvider> = {
   dark: openStreetMap,
   auto: openStreetMap,
 };
-
-// 地图配置选项
-export interface MapConfig {
-  defaultZoom: number;
-  minZoom: number;
-  maxZoom: number;
-  zoomControl: boolean;
-  attributionControl: boolean;
-  scrollWheelZoom: boolean;
-  doubleClickZoom: boolean;
-  dragging: boolean;
-  touchZoom: boolean;
-}
-
-// 默认地图配置
-export const DEFAULT_MAP_CONFIG: MapConfig = {
-  defaultZoom: 10,
-  minZoom: 2,
-  maxZoom: 18,
-  zoomControl: false,
-  attributionControl: false,
-  scrollWheelZoom: true,
-  doubleClickZoom: true,
-  dragging: true,
-  touchZoom: true,
-};
-
-// 标记样式配置
-export interface MarkerStyle {
-  color: string;
-  fillColor: string;
-  weight: number;
-  opacity: number;
-  fillOpacity: number;
-  radius: number;
-}
 
 // 精度级别对应的缩放级别
 export const ACCURACY_ZOOM_LEVELS = {
@@ -111,65 +74,4 @@ export function validateCoordinates(
   }
 
   return { isValid: true };
-}
-
-// 地图边界
-export interface MapBounds {
-  northEast: LatLngTuple;
-  southWest: LatLngTuple;
-}
-
-// 根据坐标和精度计算地图边界
-export function calculateMapBounds(
-  lat: number,
-  lng: number,
-  accuracyRadius?: number
-): MapBounds {
-  const radius = accuracyRadius || 10; // 默认10km
-  const kmToDegree = 0.009; // 大约1km = 0.009度
-
-  const latOffset = radius * kmToDegree;
-  const lngOffset = (radius * kmToDegree) / Math.cos((lat * Math.PI) / 180);
-
-  return {
-    northEast: [lat + latOffset, lng + lngOffset],
-    southWest: [lat - latOffset, lng - lngOffset],
-  };
-}
-
-// 地图事件类型
-export interface MapEventHandlers {
-  onZoomChange?: (zoom: number) => void;
-  onCenterChange?: (center: LatLngTuple) => void;
-  onMarkerClick?: (ipData: IPInfo) => void;
-  onMapClick?: (coordinates: LatLngTuple) => void;
-}
-
-// 地图加载状态
-export type MapLoadingState = "idle" | "loading" | "loaded" | "error";
-
-// 地图组件Props类型
-export interface MapComponentProps {
-  ipData: IPInfo;
-  theme?: MapTheme;
-  config?: Partial<MapConfig>;
-  className?: string;
-  onLoadingStateChange?: (state: MapLoadingState) => void;
-  eventHandlers?: MapEventHandlers;
-}
-
-// 地图错误类型
-export class MapError extends Error {
-  constructor(
-    message: string,
-    public code:
-      | "INVALID_COORDINATES"
-      | "TILE_LOAD_FAILED"
-      | "MARKER_ERROR"
-      | "UNKNOWN",
-    public coordinates?: LatLngTuple
-  ) {
-    super(message);
-    this.name = "MapError";
-  }
 }

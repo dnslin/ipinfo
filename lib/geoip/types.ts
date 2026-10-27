@@ -3,9 +3,6 @@ import type { City, Asn, Names } from "@maxmind/geoip2-node";
 // MaxMind City查询结果类型（基于@maxmind/geoip2-node的City类型）
 export type MaxMindCityResult = City;
 
-// MaxMind ASN查询结果类型（基于@maxmind/geoip2-node的Asn类型）
-export type MaxMindASNResult = Asn;
-
 // 重新导出Names类型供其他模块使用
 export type { Names };
 
