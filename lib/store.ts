@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { toast } from "sonner";
-import { ProxyDetectionResult, detectProxyClient } from "@/lib/ip-detection";
+import { ProxyDetectionResult, detectIPVersion, detectProxyClient, isPrivateIP } from "@/lib/ip-detection";
+import { DEFAULT_PROBES, probeAddress, type ProbeConfig, type StackVersion } from "@/lib/dual-stack";
 
 // IP信息接口定义
 export interface IPInfo {
@@ -57,6 +58,9 @@ export interface IPInfo {
   };
 }
 
+// 访客双栈地址：undefined 为检测中，null 为该协议不可用
+export type ConnectionStack = Record<StackVersion, string | null | undefined>;
+
 // 状态管理接口
 interface IPQueryState {
   // 数据状态
@@ -69,10 +73,13 @@ interface IPQueryState {
   error: string | null;
   isAutoDetected: boolean;
   isProxyDetecting: boolean;
+  stack: ConnectionStack;
 
   // 动作
   setQuery: (query: string) => void;
-  executeQuery: (ip?: string) => Promise<void>;
+  // auto 表示查询的是访客自己的连接地址（来自双栈检测），而不是手动输入。
+  executeQuery: (ip?: string, options?: { auto?: boolean }) => Promise<void>;
+  detectStack: () => Promise<ConnectionStack>;
   executeProxyDetection: () => Promise<void>;
   clearError: () => void;
   addToHistory: (data: IPInfo) => void;
@@ -80,6 +87,7 @@ interface IPQueryState {
 }
 
 let queryController: AbortController | null = null;
+let stackDetection: Promise<ConnectionStack> | null = null;
 
 // 创建store
 export const useIPQueryStore = create<IPQueryState>((set, get) => ({
@@ -91,12 +99,13 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
   error: null,
   isAutoDetected: false,
   isProxyDetecting: false,
+  stack: { IPv4: undefined, IPv6: undefined },
 
   // 设置查询内容
   setQuery: (query: string) => set({ currentQuery: query }),
 
   // 执行IP查询
-  executeQuery: async (ip?: string) => {
+  executeQuery: async (ip?: string, options?: { auto?: boolean }) => {
     queryController?.abort();
     const controller = new AbortController();
     queryController = controller;
@@ -110,14 +119,22 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
 
     try {
       const queryIP = ip?.trim();
-      const response = await fetch("/api/query", {
+      const post = (target?: string) => fetch("/api/query", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ip: queryIP || undefined }), // 发送undefined而不是空字符串
+        body: JSON.stringify({ ip: target || undefined }), // 发送undefined而不是空字符串
         signal: controller.signal,
       });
+      let response = await post(queryIP);
+
+      // 服务端拿不到来源地址（例如没有反向代理头）时，改用浏览器检测到的地址。
+      if (!response.ok && !queryIP) {
+        const stack = await get().detectStack();
+        const fallback = stack.IPv4 ?? stack.IPv6;
+        if (fallback && !controller.signal.aborted) response = await post(fallback);
+      }
 
       if (!response.ok) {
         const result: { error?: string } = await response.json();
@@ -130,7 +147,7 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
       set({
         ipData: result,
         error: null, // 确保清除错误状态
-        isAutoDetected: !queryIP,
+        isAutoDetected: !queryIP || Boolean(options?.auto),
         currentQuery: result.ip,
       });
 
@@ -164,6 +181,37 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
         set({ isLoading: false });
       }
     }
+  },
+
+  // 检测访客的 IPv4 与 IPv6：本站只回显当前连接的那一种，另一种交给浏览器请求单栈探测接口。
+  detectStack: () => {
+    if (stackDetection) return stackDetection;
+    stackDetection = (async () => {
+      let probes: ProbeConfig = DEFAULT_PROBES;
+      const stack: ConnectionStack = { IPv4: undefined, IPv6: undefined };
+      try {
+        const response = await fetch("/api/ip", { cache: "no-store" });
+        if (response.ok) {
+          const result: { ip: string | null; probes?: ProbeConfig } = await response.json();
+          if (result.probes) probes = result.probes;
+          const version = result.ip ? detectIPVersion(result.ip) : "invalid";
+          // 本地或内网回显（例如开发环境的 ::1）不代表公网出口，仍交给探测接口。
+          if (version !== "invalid" && result.ip && !isPrivateIP(result.ip)) {
+            stack[version] = result.ip;
+            set({ stack: { ...get().stack, [version]: result.ip } });
+          }
+        }
+      } catch {
+        // 回显接口不可用时两种协议都交给探测接口
+      }
+      await Promise.all((["IPv4", "IPv6"] as const).map(async (version) => {
+        if (stack[version]) return;
+        stack[version] = await probeAddress(version === "IPv4" ? probes.ipv4 : probes.ipv6, version);
+        set({ stack: { ...get().stack, [version]: stack[version] } });
+      }));
+      return stack;
+    })();
+    return stackDetection;
   },
 
   // 执行代理检测

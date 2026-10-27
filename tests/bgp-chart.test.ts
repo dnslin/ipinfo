@@ -1,58 +1,49 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildBGPGraph } from "../lib/bgp-graph";
-import type { BGPPeer, ProcessedBGPData } from "../lib/bgp-api";
+import { buildBGPTopology, pickTopologyNeighbors } from "../lib/bgp-graph";
+import { getBGPNeighbors } from "../lib/bgp-explorer";
+import type { BGPPeer, BGPPosition, ProcessedBGPData } from "../lib/bgp-api";
 
-const peer = (asn: number): BGPPeer => ({ asn, name: `AS${asn}`, description: "", country_code: "" });
-const data: ProcessedBGPData = {
-  centerAsn: 15169,
-  centerName: "GOOGLE",
-  ipv4Peers: [peer(174), peer(13335)],
-  ipv6Peers: [peer(13335), peer(64512)],
-  allPeers: [peer(174), peer(13335), peer(64512)],
-};
+const peer = (asn: number, position: BGPPosition, power: number): BGPPeer => ({ asn, name: `AS${asn}`, description: "", country_code: "", position, power });
+const many = (start: number, count: number, position: BGPPosition) => Array.from({ length: count }, (_, index) => peer(start + index, position, count - index));
+const data = (allPeers: BGPPeer[]): ProcessedBGPData => ({ centerAsn: 15169, centerName: "Google LLC", ipv4Peers: allPeers, ipv6Peers: [], allPeers });
 
-test("relationship view shows only the explicitly selected neighbour and target ASN", () => {
-  const graph = buildBGPGraph(data, 13335, "both");
-  assert.ok(graph);
-  assert.deepEqual(graph.nodes.map(node => node.asn), [15169, 13335]);
-  assert.equal(graph.nodes.filter(node => node.asn === 13335).length, 1);
+test("the topology keeps the strongest neighbours per direction and reports the rest as hidden", () => {
+  const neighbors = getBGPNeighbors(data([...many(100, 20, "upstream"), ...many(200, 3, "downstream"), ...many(300, 10, "uncertain")]));
+  const topology = buildBGPTopology(neighbors, "all", null, 400, 340);
+  const byPosition = (position: BGPPosition) => topology.nodes.filter(node => node.position === position).map(node => node.asn);
+  assert.deepEqual(byPosition("upstream"), [100, 101, 102, 103, 104, 105, 106, 107]);
+  assert.deepEqual(byPosition("downstream"), [200, 201, 202]);
+  assert.equal(byPosition("uncertain").length, 4);
+  assert.equal(topology.hidden, 33 - topology.nodes.length);
 });
 
-test("selected dual-stack neighbour retains both observed connections", () => {
-  const graph = buildBGPGraph(data, 13335, "both");
-  assert.ok(graph);
-  assert.deepEqual(graph.links.map(link => link.protocolType), ["ipv4", "ipv6"]);
-  assert.ok(graph.links.every(link => link.target === "as13335"));
+test("upstream nodes sit above the target and downstream nodes below it", () => {
+  const neighbors = getBGPNeighbors(data([...many(100, 5, "upstream"), ...many(200, 5, "downstream")]));
+  const topology = buildBGPTopology(neighbors, "all", null, 400, 340);
+  for (const node of topology.nodes) {
+    if (node.position === "upstream") assert.ok(node.y < topology.center.y);
+    else assert.ok(node.y > topology.center.y);
+  }
 });
 
-test("relationship protocol filter never substitutes a different neighbour", () => {
-  const graph = buildBGPGraph(data, 13335, "ipv6");
-  assert.ok(graph);
-  assert.deepEqual(graph.nodes.map(node => node.asn), [15169, 13335]);
-  assert.deepEqual(graph.links.map(link => link.protocolType), ["ipv6"]);
-  assert.equal(buildBGPGraph(data, 174, "ipv6"), null);
+test("a selected neighbour outside the strongest set is still drawn", () => {
+  const neighbors = getBGPNeighbors(data(many(100, 20, "upstream")));
+  const picked = pickTopologyNeighbors(neighbors, "all", 119);
+  assert.equal(picked.length, 8);
+  assert.ok(picked.some(neighbor => neighbor.asn === 119));
 });
 
-test("unknown ASN or empty data does not generate an invented relationship", () => {
-  assert.equal(buildBGPGraph(data, 99999, "both"), null);
-  assert.equal(buildBGPGraph({ ...data, ipv4Peers: [], ipv6Peers: [], allPeers: [] }, 13335), null);
+test("filtering to one direction spreads it around the full circle within the canvas", () => {
+  const neighbors = getBGPNeighbors(data(many(100, 30, "downstream")));
+  const topology = buildBGPTopology(neighbors, "downstream", null, 320, 300);
+  assert.equal(topology.nodes.length, 16);
+  assert.ok(topology.nodes.some(node => node.y < topology.center.y));
+  assert.ok(topology.nodes.every(node => node.x - node.r >= 0 && node.x + node.r <= 320 && node.y - node.r >= 0 && node.y + node.r <= 300));
 });
 
-test("mobile relationships keep both complete nodes inside the viewport", () => {
-  const graph = buildBGPGraph(data, 13335, "both", 288, 320);
-  assert.ok(graph);
-  assert.equal(graph.nodes[0].x, graph.nodes[1].x);
-  assert.ok(graph.nodes[0].y < graph.nodes[1].y);
-  assert.ok(graph.nodes.every(node => node.x >= 0 && node.x + node.width <= 288));
-});
-
-test("an observed neighbour without protocol counts still has a neutral relationship", () => {
-  const unspecified = { ...data, ipv4Peers: [], ipv6Peers: [], allPeers: [peer(13335)] };
-  const graph = buildBGPGraph(unspecified, 13335, "both");
-  assert.ok(graph);
-  assert.deepEqual(graph.nodes.map(node => node.asn), [15169, 13335]);
-  assert.deepEqual(graph.links.map(link => link.protocolType), ["unknown"]);
-  assert.equal(buildBGPGraph(unspecified, 13335, "ipv4"), null);
-  assert.equal(buildBGPGraph(unspecified, 13335, "ipv6"), null);
+test("no neighbours produces an empty topology instead of invented relationships", () => {
+  const topology = buildBGPTopology([], "all", null, 400, 340);
+  assert.deepEqual(topology.nodes, []);
+  assert.equal(topology.hidden, 0);
 });

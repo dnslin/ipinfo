@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import NeighborExplorer from "../components/bgp/neighbor-explorer";
 import { NeighborList, NeighborPagination } from "../components/bgp/neighbor-list";
-import { filterBGPNeighbors, getBGPNeighbors, paginateBGPNeighbors } from "../lib/bgp-explorer";
+import { countBGPPositions, filterBGPNeighbors, getBGPNeighbors, paginateBGPNeighbors, sortBGPNeighbors } from "../lib/bgp-explorer";
 import type { BGPPeer, ProcessedBGPData } from "../lib/bgp-api";
 
 const peer = (asn: number, name = `AS${asn}`): BGPPeer => ({ asn, name, description: "", country_code: "" });
@@ -91,26 +91,27 @@ test("a 19414-neighbour ASN remains completely pageable while each page stays bo
   assert.equal(new Set(visited).size, 19414);
 });
 
+const render = (value: ProcessedBGPData) => renderToStaticMarkup(createElement(NeighborExplorer, { data: value, onDrill: () => {} }));
+
 test("unknown protocols are explained in the row and summary rather than shown as zero relations", () => {
   const unspecified = { ...data, allPeers: [peer(6939)], ipv4Peers: [], ipv6Peers: [] };
   const neighbors = getBGPNeighbors(unspecified);
-  const row = renderToStaticMarkup(createElement(NeighborList, { neighbors, targetAsn: 15169, selectedAsn: null, showMetadata: false, onSelect: () => {} }));
-  const explorer = renderToStaticMarkup(createElement(NeighborExplorer, { data: unspecified }));
+  const row = renderToStaticMarkup(createElement(NeighborList, { neighbors, targetAsn: 15169, selectedAsn: null, maxPower: 0, onSelect: () => {} }));
+  const explorer = render(unspecified);
   assert.ok(row.includes("协议未提供"));
-  assert.ok(explorer.includes("协议信息未提供"));
+  assert.ok(explorer.includes("上游未提供协议信息"));
   assert.ok(!explorer.includes("IPv4 0"));
   assert.ok(!explorer.includes("IPv6 0"));
 });
 
 test("partial protocol coverage names the known counts and unlabelled neighbours", () => {
   const partial = { ...data, allPeers: [...data.allPeers, peer(6939)] };
-  const explorer = renderToStaticMarkup(createElement(NeighborExplorer, { data: partial }));
-  assert.ok(explorer.includes("已知 IPv4 2 · IPv6 2 · 未标记 1"));
+  assert.ok(render(partial).includes("IPv4 2 · IPv6 2 · 协议未提供 1"));
 });
 
 test("a large default explorer renders only its current page of neighbours", () => {
   const allPeers = Array.from({ length: 19414 }, (_, index) => peer(index + 1));
-  const explorer = renderToStaticMarkup(createElement(NeighborExplorer, { data: { ...data, allPeers, ipv4Peers: [], ipv6Peers: [] } }));
+  const explorer = render({ ...data, allPeers, ipv4Peers: [], ipv6Peers: [] });
   assert.equal(explorer.match(/<li(?:\s|>)/g)?.length, 20);
 });
 
@@ -124,19 +125,35 @@ test("large neighbour sets use a bounded page input instead of a mobile picker w
   assert.ok(!html.includes("<select"));
 });
 
-test("ASN-only datasets omit the empty metadata column and offer ASN search", () => {
-  const asnOnly = { ...data, allPeers: [peer(6939)], ipv4Peers: [], ipv6Peers: [] };
-  const html = renderToStaticMarkup(createElement(NeighborExplorer, { data: asnOnly }));
-  assert.ok(!html.includes("网络名称 / 描述"));
-  assert.ok(html.includes('placeholder="搜索 ASN"'));
-  assert.ok(!html.includes(">—<"));
+test("path direction is counted, filterable and defaults to uncertain when RIS omits it", () => {
+  const directed: ProcessedBGPData = { ...data, allPeers: [
+    { ...peer(174), position: "upstream", power: 9 },
+    { ...peer(13335, "Cloudflare"), position: "downstream", power: 2 },
+    peer(64512),
+  ] };
+  const entries = getBGPNeighbors(directed);
+  assert.deepEqual(countBGPPositions(entries), { upstream: 1, downstream: 1, uncertain: 1 });
+  assert.deepEqual(filterBGPNeighbors(entries, "", "both", "downstream").map(entry => entry.asn), [13335]);
+  assert.deepEqual(filterBGPNeighbors(entries, "", "both", "uncertain").map(entry => entry.asn), [64512]);
 });
 
-test("metadata columns depend on the full dataset rather than just the visible page", () => {
-  const allPeers = Array.from({ length: 21 }, (_, index) => peer(index + 1));
-  allPeers[20] = peer(21, "真实网络名称");
-  const html = renderToStaticMarkup(createElement(NeighborExplorer, { data: { ...data, allPeers, ipv4Peers: allPeers, ipv6Peers: [] } }));
-  assert.ok(html.includes("网络名称 / 描述"));
-  assert.ok(html.includes('placeholder="搜索 ASN、名称或描述"'));
-  assert.ok(!html.includes("真实网络名称"));
+test("strongest observations sort first with ASN as a stable tie-breaker", () => {
+  const entries = getBGPNeighbors({ ...data, allPeers: [{ ...peer(3), power: 1 }, { ...peer(2), power: 5 }, { ...peer(1), power: 1 }] });
+  assert.deepEqual(sortBGPNeighbors(entries, "power").map(entry => entry.asn), [2, 1, 3]);
+  assert.deepEqual(sortBGPNeighbors(entries, "asn").map(entry => entry.asn), [1, 2, 3]);
+});
+
+test("the explorer hides strength sorting and bars when RIS provides no observation strength", () => {
+  const html = render(data);
+  assert.ok(!html.includes("按观测强度"));
+  assert.ok(!html.includes("bgp-power-bar"));
+  const strong = render({ ...data, allPeers: data.allPeers.map((item, index) => ({ ...item, power: index + 1 })) });
+  assert.ok(strong.includes("按观测强度"));
+  assert.ok(strong.includes("bgp-power-bar"));
+});
+
+test("unnamed neighbours say so instead of repeating the ASN as a name", () => {
+  const html = renderToStaticMarkup(createElement(NeighborList, { neighbors: getBGPNeighbors(data), targetAsn: 15169, selectedAsn: null, maxPower: 0, onSelect: () => {} }));
+  assert.ok(html.includes("Cloudflare"));
+  assert.equal(html.match(/名称未提供/g)?.length, 2);
 });
