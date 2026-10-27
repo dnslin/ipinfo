@@ -1,9 +1,18 @@
 // BGP API 数据类型定义
+// 按 AS 路径位置划分的方向，仅描述观测位置，不代表商业关系。
+export type BGPPosition = "upstream" | "downstream" | "uncertain";
+
 export interface BGPPeer {
   asn: number;
   name: string;
   description: string;
   country_code: string;
+  position?: BGPPosition;
+  // 观测强度：RIS 中看到该邻接的程度，大型 ASN 可能不提供
+  power?: number;
+  // RIS 按协议给出的观测计数（asn-neighbours 的 v4_peers / v6_peers）
+  v4Peers?: number;
+  v6Peers?: number;
 }
 
 export interface BGPPeersResponse {
@@ -26,6 +35,19 @@ export interface ProcessedBGPData {
   ipv4Peers: BGPPeer[];
   ipv6Peers: BGPPeer[];
   allPeers: BGPPeer[];
+}
+
+// "GOOGLE - Google LLC" → 组织名 "Google LLC"、注册句柄 "GOOGLE"；末尾的 ", US" 视为国家代码。
+export function splitASName(raw: string): Pick<BGPPeer, "name" | "description" | "country_code"> {
+  let value = raw.trim();
+  let country_code = "";
+  const country = value.match(/,\s*([A-Z]{2})$/);
+  if (country) {
+    country_code = country[1];
+    value = value.slice(0, country.index).trim();
+  }
+  const parts = value.match(/^(\S+) - (.+)$/);
+  return parts ? { name: parts[2].trim(), description: parts[1], country_code } : { name: value, description: "", country_code };
 }
 
 // BGP API 缓存

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, Loader2, Network, RefreshCw, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, ChevronRight, Loader2, RefreshCw, X } from "lucide-react";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { fetchBGPPeers, type ProcessedBGPData } from "@/lib/bgp-api";
 import NeighborExplorer from "@/components/bgp/neighbor-explorer";
@@ -15,22 +15,34 @@ interface BGPPeersDialogProps {
 }
 
 export default function BGPPeersDialog({ asn, asnName, isOpen, onClose, onReturnFocus }: BGPPeersDialogProps) {
+  // 从邻居继续查看它的邻接时记录路径，可逐级返回。
+  const [trail, setTrail] = useState([{ asn, name: asnName }]);
+  const current = trail[trail.length - 1];
+
   return <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
-    <DialogContent showCloseButton={false} onCloseAutoFocus={(event) => { event.preventDefault(); onReturnFocus(); }} className="flex h-[calc(100dvh_-_1rem)] w-[calc(100vw_-_1rem)] max-w-none flex-col gap-0 overflow-hidden rounded-xl border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-0 text-[rgb(var(--color-text-primary))] sm:h-[min(780px,90dvh)] sm:w-[calc(100vw_-_3rem)] sm:max-w-5xl">
-      <header className="flex shrink-0 items-start justify-between gap-3 border-b border-[rgb(var(--color-border))] p-4 sm:px-6">
-        <div className="min-w-0 space-y-1.5">
-          <DialogTitle className="flex items-center gap-2 text-base sm:text-lg"><Network className="h-4 w-4 shrink-0 text-[rgb(var(--color-text-secondary))]" />BGP 邻接关系</DialogTitle>
-          <p className="break-words text-sm text-[rgb(var(--color-text-secondary))]"><span className="font-mono font-medium text-[rgb(var(--color-text-primary))]">AS{asn}</span>{asnName ? ` · ${asnName}` : ""}</p>
-          <DialogDescription className="text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">RIPE RIS 公开路由观测，不代表实时 BGP 会话状态。</DialogDescription>
+    <DialogContent showCloseButton={false} onCloseAutoFocus={(event) => { event.preventDefault(); onReturnFocus(); }} className="bgp-dialog flex h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none flex-col gap-0 overflow-hidden rounded-[18px] p-0 sm:h-[min(860px,92dvh)] sm:w-[calc(100vw-3rem)] sm:max-w-6xl">
+      <header className="bgp-dialog-head">
+        {trail.length > 1 ? <button type="button" className="ui-button ui-icon-button" aria-label="返回上一个 ASN" onClick={() => setTrail(items => items.slice(0, -1))}><ArrowLeft className="h-4 w-4" /></button> : null}
+        <div className="min-w-0 flex-1">
+          <DialogTitle className="text-[15px] leading-snug font-semibold">BGP 邻接观测</DialogTitle>
+          <DialogDescription className="sr-only">RIPE RIS 公开路由观测，不代表实时 BGP 会话状态，也不等同于商业关系。</DialogDescription>
+          {trail.length > 1 ? <nav aria-label="查看路径" className="bgp-trail">
+            {trail.map((item, index) => <span key={`${item.asn}-${index}`} className="bgp-trail-item">
+              {index > 0 ? <ChevronRight aria-hidden="true" /> : null}
+              {index < trail.length - 1
+                ? <button type="button" className="font-mono" onClick={() => setTrail(items => items.slice(0, index + 1))}>AS{item.asn}</button>
+                : <span className="font-mono" aria-current="page">AS{item.asn}</span>}
+            </span>)}
+          </nav> : null}
         </div>
-        <DialogClose asChild><button type="button" className="ui-button ui-icon-button shrink-0" aria-label="关闭 BGP 邻接关系"><X className="h-4 w-4" /></button></DialogClose>
+        <DialogClose asChild><button type="button" className="ui-button ui-icon-button" aria-label="关闭 BGP 邻接观测"><X className="h-4 w-4" /></button></DialogClose>
       </header>
-      {isOpen ? <BGPPeersContent key={asn} asn={asn} /> : null}
+      {isOpen ? <BGPPeersContent key={current.asn} asn={current.asn} onDrill={(next, name) => setTrail(items => [...items, { asn: next, name }])} /> : null}
     </DialogContent>
   </Dialog>;
 }
 
-function BGPPeersContent({ asn }: { asn: number }) {
+function BGPPeersContent({ asn, onDrill }: { asn: number; onDrill: (asn: number, name?: string) => void }) {
   const [data, setData] = useState<ProcessedBGPData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,15 +60,15 @@ function BGPPeersContent({ asn }: { asn: number }) {
     return () => { cancelled = true; };
   }, [asn, retryCount]);
 
-  if (isLoading) return <div className="ui-empty-state flex flex-col items-center justify-center min-h-0 flex-1 gap-3 p-6 text-center" role="status">
-    <Loader2 className="h-6 w-6 animate-spin text-[rgb(var(--color-text-secondary))]" />
-    <p className="text-sm">正在获取相邻网络…</p>
+  if (isLoading) return <div className="bgp-state" role="status">
+    <Loader2 className="h-6 w-6 animate-spin" />
+    <p>正在获取 AS{asn} 的相邻网络…</p>
   </div>;
 
-  if (error) return <div className="ui-empty-state flex flex-col items-center justify-center min-h-0 flex-1 gap-3 overflow-y-auto p-6 text-center" role="alert">
-    <AlertCircle className="h-6 w-6 text-[rgb(var(--color-text-secondary))]" />
-    <p className="font-medium">暂时无法获取邻接网络</p>
-    <p className="max-w-md break-words text-sm text-[rgb(var(--color-text-secondary))]">{error}</p>
+  if (error) return <div className="bgp-state" role="alert">
+    <AlertCircle className="h-6 w-6" />
+    <p className="bgp-state-title">暂时无法获取邻接网络</p>
+    <p className="bgp-state-text">{error}</p>
     <button type="button" className="ui-button" onClick={() => {
       setError(null);
       setIsLoading(true);
@@ -64,5 +76,5 @@ function BGPPeersContent({ asn }: { asn: number }) {
     }}><RefreshCw className="h-4 w-4" />重新加载</button>
   </div>;
 
-  return data ? <NeighborExplorer data={data} /> : null;
+  return data ? <NeighborExplorer data={data} onDrill={onDrill} /> : null;
 }

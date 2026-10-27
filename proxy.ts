@@ -1,60 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getClientIP, getUserIPVersion } from "@/lib/ip-detection";
 
 export function proxy(request: NextRequest) {
   const url = new URL(request.url);
-  const hostname = request.headers.get("host") || "";
 
-  // 解析子域名
-  const subdomain = hostname.split(".")[0];
-
-  // 获取客户端IP并添加到请求头
-  const clientIP = getClientIP(request);
-  if (clientIP) {
-    url.searchParams.set("clientIP", clientIP);
-  }
-
-  // 处理不同的子域名路由
-  switch (subdomain) {
-    case "ip4":
-      // 强制IPv4版本
-      url.searchParams.set("ipVersion", "v4");
-      url.searchParams.set("forceVersion", "true");
-      break;
-
-    case "ip6":
-      // 强制IPv6版本
-      url.searchParams.set("ipVersion", "v6");
-      url.searchParams.set("forceVersion", "true");
-      break;
-
-    case "ip":
-    default:
-      // 自动检测或双栈支持
-      const preferredVersion = getUserIPVersion(request);
-      if (preferredVersion !== "dual") {
-        url.searchParams.set(
-          "ipVersion",
-          preferredVersion === "IPv4" ? "v4" : "v6"
-        );
-      }
-      break;
-  }
-
-  // 添加用户代理信息用于统计
-  const userAgent = request.headers.get("user-agent") || "";
-  const isMobile = /Mobile|Android|iPhone|iPad/i.test(userAgent);
-  url.searchParams.set("isMobile", isMobile.toString());
-
-  // 添加地理位置hint（如果有Cloudflare等CDN提供）
-  const cfCountry = request.headers.get("cf-ipcountry");
-  if (cfCountry) {
-    url.searchParams.set("cfCountry", cfCountry);
-  }
-
-  // 安全头设置
-  const response = NextResponse.rewrite(url);
+  // IPv4/IPv6 由浏览器端双栈检测完成（见 lib/dual-stack.ts），这里不再依赖 ip4/ip6 子域名。
+  const response = NextResponse.next();
 
   // 安全相关头
   response.headers.set("X-Frame-Options", "DENY");

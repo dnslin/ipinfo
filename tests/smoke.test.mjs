@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createServer, get } from "node:http";
+import { createServer } from "node:http";
 import { cp } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -92,23 +92,15 @@ test("first-paint theme follows the system even when browser storage is unavaila
   assert.equal(root.style.colorScheme, "dark");
 });
 
-test("IPv4 and IPv6 subdomains preserve forced version rewrites", async () => {
-  for (const [subdomain, version] of [["ip4", "v4"], ["ip6", "v6"]]) {
-    const response = await new Promise((resolve, reject) => {
-      get(`${baseURL}/api/init`, {
-        headers: { host: `${subdomain}.example.test` },
-        signal: AbortSignal.timeout(5_000),
-      }, (response) => {
-        response.resume();
-        response.on("end", () => resolve(response));
-      }).on("error", reject);
-    });
-    assert.equal(response.statusCode, 200);
-    const rewrittenURL = new URL(response.headers["x-middleware-rewrite"], baseURL);
-    assert.equal(rewrittenURL.searchParams.get("ipVersion"), version);
-    assert.equal(rewrittenURL.searchParams.get("forceVersion"), "true");
-    assert.equal(rewrittenURL.origin, baseURL);
-  }
+test("connection echo works on a single host and exposes dual-stack probes", async () => {
+  const response = await request("/api/ip", { headers: { "x-real-ip": "203.0.113.9" } });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  assert.match(response.headers.get("cache-control"), /no-store/);
+  const body = await response.json();
+  assert.equal(body.ip, "203.0.113.9");
+  assert.equal(body.version, "IPv4");
+  assert.ok(body.probes.ipv4.length > 0 && body.probes.ipv6.length > 0);
 });
 
 test("IP query rejects invalid input and keeps API proxy headers", async () => {

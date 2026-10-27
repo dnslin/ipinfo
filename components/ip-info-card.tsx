@@ -14,6 +14,7 @@ import { ProxyDetectionSummary } from "./proxy-detection-result";
 import { ResultStage } from "./result-stage";
 import { useSetMapFocus } from "./map-focus";
 import BGPPeersDialog from "./bgp-peers-dialog";
+import { StackSummary } from "./version-switcher";
 
 function CountryMark({ code, country }: { code: string; country: string }) {
   const [failedCode, setFailedCode] = useState<string | null>(null);
@@ -94,6 +95,7 @@ export default function IPInfoCard({ ipData }: { ipData: IPInfo }) {
           <h2 className="id-ip" style={{ "--ip-chars": ipData.ip.length } as CSSProperties}><IPAddress value={ipData.ip} /></h2>
           <p className="id-place"><CountryMark code={currentData.countryCode} country={currentData.country} /><span>{isLocalAddress ? "本地网络" : place || "地区信息未提供"}</span></p>
           <p className="id-source">{isLocalAddress ? sourceName : `位置来源 · ${sourceName}`}</p>
+          {isAutoDetected && <StackSummary />}
           <div className="id-actions">
             <button type="button" onClick={copyIP} className="id-button id-button-primary" aria-label={copied ? "IP 地址已复制" : "复制 IP 地址"}>
               <span className="icon-swap" data-done={copied || undefined} aria-hidden="true"><Copy /><Check /></span>{copied ? "已复制" : "复制 IP"}

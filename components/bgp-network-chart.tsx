@@ -1,55 +1,33 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as d3 from "d3";
-import { Download, Minus, Plus, RotateCcw } from "lucide-react";
+import { Download } from "lucide-react";
 import { toast } from "sonner";
-import type { ProcessedBGPData } from "@/lib/bgp-api";
-import type { BGPProtocol } from "@/lib/bgp-explorer";
-import { buildBGPGraph } from "@/lib/bgp-graph";
+import { POSITION_LABELS, type BGPNeighbor, type PositionFilter } from "@/lib/bgp-explorer";
+import { buildBGPTopology } from "@/lib/bgp-graph";
 
 interface BGPNetworkChartProps {
-  data: ProcessedBGPData;
-  selectedAsn: number;
-  protocolType: BGPProtocol;
+  neighbors: BGPNeighbor[];
+  position: PositionFilter;
+  centerAsn: number;
+  centerName: string;
+  selectedAsn: number | null;
+  onSelect: (asn: number) => void;
 }
 
-export default function BGPNetworkChart({ data, selectedAsn, protocolType }: BGPNetworkChartProps) {
+export default function BGPNetworkChart({ neighbors, position, centerAsn, centerName, selectedAsn, onSelect }: BGPNetworkChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const groupRef = useRef<SVGGElement>(null);
-  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const [width, setWidth] = useState<number | null>(null);
-  const height = 320;
-  const graph = useMemo(() => width === null ? null : buildBGPGraph(data, selectedAsn, protocolType, width, height), [data, selectedAsn, protocolType, width]);
+  const height = width !== null && width < 420 ? 300 : 340;
+  const topology = useMemo(() => width === null ? null : buildBGPTopology(neighbors, position, selectedAsn, width, height), [neighbors, position, selectedAsn, width, height]);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    const observer = new ResizeObserver(([entry]) => setWidth(Math.round(entry.contentRect.width)));
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
-
-  useEffect(() => {
-    if (!svgRef.current || !groupRef.current || !graph) return;
-    const svg = d3.select(svgRef.current);
-    const group = d3.select(groupRef.current);
-    const zoom = d3.zoom<SVGSVGElement, unknown>().scaleExtent([0.75, 2.5])
-      .on("zoom", event => group.attr("transform", event.transform));
-    zoomRef.current = zoom;
-    svg.call(zoom).call(zoom.transform, d3.zoomIdentity);
-    return () => {
-      svg.on(".zoom", null);
-      zoomRef.current = null;
-    };
-  }, [graph]);
-
-  const zoomBy = (factor: number) => {
-    if (svgRef.current && zoomRef.current) d3.select(svgRef.current).transition().duration(180).call(zoomRef.current.scaleBy, factor);
-  };
-  const reset = () => {
-    if (svgRef.current && zoomRef.current) d3.select(svgRef.current).transition().duration(180).call(zoomRef.current.transform, d3.zoomIdentity);
-  };
 
   const exportImage = async () => {
     const svg = svgRef.current;
@@ -61,7 +39,7 @@ export default function BGPNetworkChart({ data, selectedAsn, protocolType }: BGP
       const copies = [clone, ...clone.querySelectorAll("*")];
       originals.forEach((element, index) => {
         const style = getComputedStyle(element);
-        for (const property of ["fill", "stroke", "font-family", "font-size", "font-weight"]) {
+        for (const property of ["fill", "stroke", "stroke-width", "stroke-opacity", "fill-opacity", "opacity", "font-family", "font-size", "font-weight"]) {
           copies[index].setAttribute(property, style.getPropertyValue(property));
         }
       });
@@ -73,15 +51,15 @@ export default function BGPNetworkChart({ data, selectedAsn, protocolType }: BGP
         image.src = imageUrl!;
       });
       const canvas = document.createElement("canvas");
-      canvas.width = Math.ceil(width * 2);
+      canvas.width = width * 2;
       canvas.height = height * 2;
       const context = canvas.getContext("2d");
       if (!context) throw new Error("浏览器无法生成图片");
-      context.fillStyle = getComputedStyle(svg).backgroundColor;
+      context.fillStyle = getComputedStyle(containerRef.current!).backgroundColor;
       context.fillRect(0, 0, canvas.width, canvas.height);
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
       const link = document.createElement("a");
-      link.download = `as${data.centerAsn}-as${selectedAsn}-relationship.png`;
+      link.download = `as${centerAsn}-neighbours.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (error) {
@@ -91,45 +69,60 @@ export default function BGPNetworkChart({ data, selectedAsn, protocolType }: BGP
     }
   };
 
+  const centerLabel = centerName && centerName !== `AS${centerAsn}` ? (centerName.length > 18 ? `${centerName.slice(0, 17)}…` : centerName) : "";
+
   return (
-    <div ref={containerRef} className="overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-3 py-2">
-        <span className="text-xs text-[rgb(var(--color-text-secondary))]">可拖拽平移</span>
-        <div className="flex items-center gap-1">
-          <button type="button" className="ui-button ui-icon-button" aria-label="放大关系图" title="放大" onClick={() => zoomBy(1.2)}><Plus className="h-4 w-4" /></button>
-          <button type="button" className="ui-button ui-icon-button" aria-label="缩小关系图" title="缩小" onClick={() => zoomBy(0.8)}><Minus className="h-4 w-4" /></button>
-          <button type="button" className="ui-button ui-icon-button" aria-label="重置关系图" title="重置" onClick={reset}><RotateCcw className="h-4 w-4" /></button>
-          <button type="button" className="ui-button ui-icon-button" aria-label="导出关系图" title="导出 PNG" onClick={exportImage}><Download className="h-4 w-4" /></button>
-        </div>
-      </div>
-      {width === null ? <div className="ui-empty-state flex flex-col items-center justify-center h-80" role="status">正在准备关系视图…</div> : graph === null ? (
-        <div className="ui-empty-state flex flex-col items-center justify-center h-80" role="status">当前筛选没有可展示的协议记录，可切换“全部”查看邻接关系。</div>
-      ) : (
-        <svg ref={svgRef} width="100%" height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`AS${data.centerAsn} 与 AS${selectedAsn} 的观测邻接关系`} style={{ background: "rgb(var(--color-surface))", touchAction: "none" }}>
-          <g ref={groupRef}>
-            {graph.links.map((link, index) => {
-              const offset = graph.links.length === 1 ? 0 : index === 0 ? -24 : 24;
-              const source = link.sourceNode;
-              const target = link.targetNode;
-              const middleX = width / 2 + offset;
-              const middleY = height / 2 + offset;
-              const path = graph.vertical
-                ? `M${middleX},${source.y + source.height}V${target.y}`
-                : `M${source.x + source.width},${middleY}H${target.x}`;
-              return <g key={link.protocolType}>
-                <path d={path} fill="none" stroke="rgb(var(--color-text-secondary))" strokeWidth="1.5" strokeDasharray={link.protocolType === "unknown" ? "2 5" : link.protocolType === "ipv6" ? "5 5" : undefined} />
-                <text x={graph.vertical ? middleX + (index === 0 ? -8 : 8) : width / 2} y={graph.vertical ? height / 2 : middleY - 8} textAnchor={graph.vertical ? index === 0 ? "end" : "start" : "middle"} fill="rgb(var(--color-text-secondary))" fontSize="12">{link.protocolType === "unknown" ? "邻接（协议未提供）" : link.protocolType === "ipv4" ? "IPv4" : "IPv6"}</text>
+    <figure className="bgp-chart">
+      <figcaption className="bgp-chart-head">
+        <span>邻接关系图</span>
+        <button type="button" className="ui-button ui-icon-button" aria-label="导出关系图 PNG" title="导出 PNG" onClick={exportImage} disabled={!topology || topology.nodes.length === 0}><Download className="h-4 w-4" /></button>
+      </figcaption>
+      <div ref={containerRef} className="bgp-chart-canvas">
+        {topology === null ? <div className="bgp-state" style={{ height }} role="status">正在准备关系图…</div> : topology.nodes.length === 0 ? (
+          <div className="bgp-state" style={{ height }} role="status">当前筛选没有可展示的邻居。</div>
+        ) : (
+          <svg ref={svgRef} width={width ?? 0} height={height} viewBox={`0 0 ${width} ${height}`} role="group" aria-label={`AS${centerAsn} 的观测邻接，按观测强度显示前 ${topology.nodes.length} 个`}>
+            <g className="bgp-chart-links">
+              {topology.nodes.map(node => <line key={node.asn} x1={topology.center.x} y1={topology.center.y} x2={node.x} y2={node.y} data-position={node.position} data-selected={node.asn === selectedAsn || undefined} />)}
+            </g>
+            <g className="bgp-chart-center">
+              <circle cx={topology.center.x} cy={topology.center.y} r={topology.center.r} />
+              <text x={topology.center.x} y={topology.center.y + 4} textAnchor="middle" className="font-mono">AS{centerAsn}</text>
+              {centerLabel ? <text x={topology.center.x} y={topology.center.y + topology.center.r + 15} textAnchor="middle" className="bgp-chart-center-name">{centerLabel}</text> : null}
+            </g>
+            {topology.nodes.map(node => {
+              const selected = node.asn === selectedAsn;
+              const label = `AS${node.asn}${node.name && node.name !== `AS${node.asn}` ? ` ${node.name}` : ""}，${POSITION_LABELS[node.position]}，观测强度 ${node.power}`;
+              return <g
+                key={node.asn}
+                className="bgp-chart-node"
+                data-position={node.position}
+                data-selected={selected || undefined}
+                data-quiet={node.quiet || undefined}
+                role="button"
+                tabIndex={0}
+                aria-label={label}
+                aria-pressed={selected}
+                onClick={() => onSelect(node.asn)}
+                onKeyDown={event => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  onSelect(node.asn);
+                }}
+              >
+                <title>{label}</title>
+                <circle cx={node.x} cy={node.y} r={node.r + 8} className="bgp-chart-hit" />
+                <circle cx={node.x} cy={node.y} r={node.r} />
+                <text x={node.labelX} y={node.labelY} textAnchor={node.anchor} className="font-mono">AS{node.asn}</text>
               </g>;
             })}
-            {graph.nodes.map(node => <g key={node.id} transform={`translate(${node.x},${node.y})`}>
-              <rect width={node.width} height={node.height} rx="8" fill="rgb(var(--color-surface-hover))" stroke={node.isCenter ? "rgb(var(--color-border))" : "rgb(var(--color-primary))"} />
-              <text x={node.width / 2} y="23" textAnchor="middle" fill="rgb(var(--color-text-secondary))" fontSize="11">{node.isCenter ? "查询目标" : "当前选择"}</text>
-              <text x={node.width / 2} y="50" textAnchor="middle" fill="rgb(var(--color-text-primary))" fontSize="18" className="font-mono">AS{node.asn}</text>
-              {node.name && node.name !== `AS${node.asn}` ? <text x={node.width / 2} y="68" textAnchor="middle" fill="rgb(var(--color-text-secondary))" fontSize="11">{node.name.length > 16 ? `${node.name.slice(0, 15)}…` : node.name}</text> : null}
-            </g>)}
-          </g>
-        </svg>
-      )}
-    </div>
+          </svg>
+        )}
+      </div>
+      <div className="bgp-legend">
+        {(["upstream", "downstream", "uncertain"] as const).map(value => <span key={value} data-position={value}><i aria-hidden="true" />{POSITION_LABELS[value]}</span>)}
+        {topology && topology.hidden > 0 ? <span className="bgp-legend-note">按观测强度显示前 {topology.nodes.length} 个，另有 {topology.hidden.toLocaleString()} 个见列表</span> : null}
+      </div>
+    </figure>
   );
 }

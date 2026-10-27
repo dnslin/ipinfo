@@ -134,34 +134,6 @@ export function getClientIP(request: NextRequest): string | null {
   return null;
 }
 
-// 获取用户首选IP版本
-export function getUserIPVersion(
-  request: NextRequest
-): "IPv4" | "IPv6" | "dual" {
-  const url = request.nextUrl;
-  const forcedVersion = url.searchParams.get("ipVersion");
-
-  // 检查URL参数强制指定版本
-  if (forcedVersion === "v4") return "IPv4";
-  if (forcedVersion === "v6") return "IPv6";
-
-  // 检查子域名
-  const hostname = request.headers.get("host") || "";
-  const subdomain = hostname.split(".")[0];
-
-  if (subdomain === "ip4") return "IPv4";
-  if (subdomain === "ip6") return "IPv6";
-
-  // 自动检测客户端IP版本
-  const clientIP = getClientIP(request);
-  if (clientIP) {
-    const version = detectIPVersion(clientIP);
-    if (version !== "invalid") return version;
-  }
-
-  return "dual";
-}
-
 // 验证IP地址格式
 export function isValidIP(ip: string): boolean {
   return detectIPVersion(ip) !== "invalid";

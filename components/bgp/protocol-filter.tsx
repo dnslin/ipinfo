@@ -12,13 +12,12 @@ const options = [
 ] as const;
 
 export default function ProtocolFilter({ value, onChange }: ProtocolFilterProps) {
-  return <div className="flex shrink-0 gap-1" role="group" aria-label="筛选邻接协议">
+  return <div className="bgp-segmented" role="group" aria-label="筛选邻接协议">
     {options.map(option => <button
       key={option.value}
       type="button"
       aria-pressed={value === option.value}
-      onClick={() => onChange(option.value)}
-      className={`ui-button flex-1 !rounded-lg ${value === option.value ? "ui-button-primary" : ""}`}
+      onClick={() => value !== option.value && onChange(option.value)}
     >{option.label}</button>)}
   </div>;
 }

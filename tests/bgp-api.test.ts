@@ -13,6 +13,7 @@ afterEach(() => mock.restoreAll());
 test("RIPE RIS observations are grouped by protocol and repeated ASNs are deduplicated", async () => {
   let upstreamURL: URL | undefined;
   mock.method(globalThis, "fetch", async (url: string) => {
+    if (url.includes("/as-names/")) return Response.json({ status: "ok", data: { names: { 15169: "GOOGLE - Google LLC", 174: "COGENT-174 - Cogent Communications, US", 13335: "AS13335 - Cloudflare, Inc." } } });
     upstreamURL = new URL(url);
     return Response.json({
       status: "ok",
@@ -35,16 +36,24 @@ test("RIPE RIS observations are grouped by protocol and repeated ASNs are dedupl
   assert.equal(upstreamURL?.searchParams.get("resource"), "AS15169");
   assert.equal(upstreamURL?.searchParams.get("sourceapp"), "ipinfo");
   assert.equal(data.centerAsn, 15169);
-  assert.equal(data.centerName, "AS15169");
+  assert.equal(data.centerName, "Google LLC");
   assert.deepEqual(data.ipv4Peers.map((peer: { asn: number }) => peer.asn), [174, 13335]);
   assert.deepEqual(data.ipv6Peers.map((peer: { asn: number }) => peer.asn), [13335, 174]);
   assert.deepEqual(data.allPeers.map((peer: { asn: number }) => peer.asn), [174, 13335]);
+  // 左右两侧都出现的邻居方向记为不确定，观测计数合并
   assert.deepEqual(data.allPeers[0], {
     asn: 174,
-    name: "AS174",
-    description: "",
-    country_code: "",
+    name: "Cogent Communications",
+    description: "COGENT-174",
+    country_code: "US",
+    power: 2,
+    v4Peers: 8,
+    v6Peers: 2,
+    position: "uncertain",
   });
+  assert.equal(data.allPeers[1].position, "upstream");
+  assert.equal(data.allPeers[1].name, "Cloudflare, Inc.");
+  assert.equal(data.allPeers[1].description, "");
 });
 
 test("large ASN observations without protocol counters remain visible without inventing protocols", async () => {
@@ -60,6 +69,19 @@ test("large ASN observations without protocol counters remain visible without in
   assert.deepEqual(data.allPeers.map((peer: { asn: number }) => peer.asn), [10352, 10796, 174]);
   assert.deepEqual(data.ipv4Peers.map((peer: { asn: number }) => peer.asn), [174]);
   assert.deepEqual(data.ipv6Peers, []);
+});
+
+test("AS name lookup failures keep the neighbour data", async () => {
+  mock.method(globalThis, "fetch", async (url: string) => {
+    if (url.includes("/as-names/")) throw new TypeError("network down");
+    return Response.json({ status: "ok", data: { neighbours: [{ asn: 174, type: "right", power: 3, v4_peers: 1, v6_peers: 0 }] } });
+  });
+  const response = await query();
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.centerName, "AS15169");
+  assert.equal(data.allPeers[0].name, "AS174");
+  assert.equal(data.allPeers[0].position, "downstream");
 });
 
 test("an ASN with no RIS observations returns an empty result", async () => {
