@@ -17,10 +17,10 @@ export default function VersionSwitcher() {
   ];
 
   return (
-    <nav aria-label="IP 连接版本" className="flex w-full rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-hover))] p-0.5 min-[380px]:w-auto">
+    <nav aria-label="IP 连接版本" className="version-switcher">
       {versions.map((version) => {
         const active = current === version.id;
-        const className = `inline-flex min-h-[42px] flex-1 items-center justify-center rounded-[9px] px-3 text-xs font-medium min-[380px]:flex-none ${active ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-accent-text))] shadow-sm" : "text-[rgb(var(--color-text-secondary))]"}`;
+        const className = "version-switcher-option";
         return local ? (
           <button key={version.id} type="button" className={className} aria-current={active ? "page" : undefined} disabled={!active} title="本地预览使用当前网络连接">{version.label}</button>
         ) : (

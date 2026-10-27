@@ -65,37 +65,34 @@ export default function IPInfoCard({ ipData }: { ipData: IPInfo }) {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <section className="ui-card px-5 py-5 sm:px-6 sm:py-6" aria-label="IP 查询结果">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-          <div className="min-w-0">
+      <section className="ui-card overflow-hidden" aria-label="IP 查询结果">
+        <div className="ip-result-header">
+          <div className="ip-result-identity">
             <p className="mb-2 text-xs text-[rgb(var(--color-text-muted))]">{isAutoDetected ? "当前连接 IP" : "查询结果"}</p>
-            <h2 className="text-[22px] sm:text-[28px]"><IPAddress value={ipData.ip} /></h2>
+            <h2 className="ip-result-address"><IPAddress value={ipData.ip} /></h2>
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[rgb(var(--color-text-secondary))]">
-              <span className="ui-badge ui-badge-accent">{currentData.ipVersion}</span>
+              <span>{currentData.ipVersion}</span>
               <span className="flex items-center gap-1.5"><CountryMark code={currentData.countryCode} country={currentData.country} />{isLocalAddress ? "本地网络" : currentData.country || "地区未知"}</span>
               <span className="h-3 w-px bg-[rgb(var(--color-border))]" aria-hidden="true" />
               <span>{isLocalAddress ? sourceName : `位置来源 · ${sourceName}`}</span>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="ip-result-actions">
             <button type="button" onClick={copyIP} className="ui-button" aria-label="复制 IP 地址"><Copy className="h-3.5 w-3.5" />复制</button>
             {!isLocalAddress && currentData.source !== "MeiTuan" && <button type="button" disabled={isTracing} onClick={trace} className="ui-button">{isTracing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}{isTracing ? "正在查询" : "美团溯源"}</button>}
             {tracedData && <button type="button" onClick={() => { setTracedData(null); setTraceMessage(null); }} className="ui-button"><RotateCcw className="h-3.5 w-3.5" />恢复原始结果</button>}
             {isAutoDetected && !isLocalAddress && <button type="button" disabled={isProxyDetecting} onClick={executeProxyDetection} className="ui-button">{isProxyDetecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5" />}{isProxyDetecting ? "检测中" : "代理检测"}</button>}
           </div>
         </div>
-        {traceMessage && <p role={traceMessage.error ? "alert" : "status"} className={`mt-4 border-t border-[rgb(var(--color-border-light))] pt-3 text-sm ${traceMessage.error ? "text-[rgb(var(--color-error))]" : "text-[rgb(var(--color-text-secondary))]"}`}>{traceMessage.text}</p>}
-      </section>
-
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] sm:gap-5">
-        <div className="space-y-4 sm:space-y-5">
+        {traceMessage && <p role={traceMessage.error ? "alert" : "status"} className={`ip-trace-message ${traceMessage.error ? "text-[rgb(var(--color-error))]" : "text-[rgb(var(--color-text-secondary))]"}`}>{traceMessage.text}</p>}
+        <div className="ip-result-fields">
           <LocationDetails data={currentData} />
           <NetworkDetails data={currentData} onOpenBGP={(asn, name, trigger) => setSelectedASN({ asn, name, trigger })} />
         </div>
-        <LazyIPMap ipData={currentData} />
-      </div>
+        <AdditionalDetails data={currentData} />
+      </section>
       {isAutoDetected && currentData.proxyDetection && <ProxyDetectionSummary result={currentData.proxyDetection} />}
-      <AdditionalDetails data={currentData} />
+      <LazyIPMap ipData={currentData} />
       {selectedASN && <BGPPeersDialog asn={selectedASN.asn} asnName={selectedASN.name} isOpen onClose={() => setSelectedASN(null)} onReturnFocus={() => selectedASN.trigger.focus({ preventScroll: true })} />}
     </div>
   );

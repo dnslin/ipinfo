@@ -59,7 +59,7 @@ export function NeighborPagination({ page, onPageChange }: { page: NeighborPage;
       }}>
         <label className="flex items-center gap-1 text-xs text-[rgb(var(--color-text-secondary))]">
           <span className="sr-only">跳转邻接列表页</span>
-          <input type="number" name="page" aria-label="跳转邻接列表页" min={1} max={page.pageCount} step={1} required inputMode="numeric" defaultValue={page.page} className="ui-input h-11 w-16 px-2 font-mono text-sm" />
+          <input type="number" name="page" aria-label="跳转邻接列表页" min={1} max={page.pageCount} step={1} required inputMode="numeric" defaultValue={page.page} className="ui-input h-11 w-16 px-2 font-mono text-base sm:text-sm" />
           <span>/ {page.pageCount}</span>
         </label>
         <button type="submit" className="ui-button">跳转</button>

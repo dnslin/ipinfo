@@ -38,17 +38,17 @@ export default function IPQueryForm() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[680px]">
+    <div className="w-full">
       <IPQueryInput value={inputValue} disabled={isLoading} onChange={(event) => changeInput(event.target.value)} onSubmit={submit} />
       {error && <p role="alert" className="mt-3 text-left text-sm text-[rgb(var(--color-error))]">{error}</p>}
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-[rgb(var(--color-text-muted))] sm:gap-3">
-        <button type="button" disabled={isLoading} onClick={queryMyIP} className="ui-button gap-1.5 border-transparent bg-transparent px-2 py-1 text-xs">
+      <div className="query-extras">
+        <button type="button" disabled={isLoading} onClick={queryMyIP} className="ui-button gap-1.5">
           <LocateFixed className="h-3.5 w-3.5" />查询我的 IP
         </button>
         <span className="h-3 w-px bg-[rgb(var(--color-border))]" aria-hidden="true" />
         <span>试一试</span>
-        <button type="button" disabled={isLoading} onClick={() => changeInput("8.8.8.8")} className="ui-button px-2.5 py-1 text-xs" aria-label="填入 IPv4 示例 8.8.8.8"><span className="font-mono">8.8.8.8</span></button>
-        <button type="button" disabled={isLoading} onClick={() => changeInput("2001:4860:4860::8888")} className="ui-button px-2.5 py-1 text-xs" aria-label="填入 IPv6 示例">IPv6 示例</button>
+        <button type="button" disabled={isLoading} onClick={() => changeInput("8.8.8.8")} className="ui-button" aria-label="填入 IPv4 示例 8.8.8.8"><span className="font-mono">8.8.8.8</span></button>
+        <button type="button" disabled={isLoading} onClick={() => changeInput("2001:4860:4860::8888")} className="ui-button" aria-label="填入 IPv6 示例">IPv6 示例</button>
       </div>
     </div>
   );
