@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
-import { Search } from "lucide-react";
+import { LocateFixed } from "lucide-react";
 import { useIPQueryStore } from "@/lib/store";
-import IPQueryForm from "@/components/ip-query-form";
+import SiteNav from "@/components/site-nav";
 import IPInfoCard from "@/components/ip-info-card";
-import VersionSwitcher from "@/components/version-switcher";
-import ThemeToggle from "@/components/theme-toggle";
+import { ResultStage } from "@/components/result-stage";
 
 export default function Home() {
   const { ipData, isLoading, error, executeQuery } = useIPQueryStore();
@@ -14,30 +13,27 @@ export default function Home() {
 
   return (
     <div className="site-page">
-      <header className="site-header">
-        <VersionSwitcher />
-        <ThemeToggle />
-      </header>
-      <main className="site-main">
-        <section aria-labelledby="query-heading" className="query-section">
-          <h1 id="query-heading" className="sr-only">IP 地址查询</h1>
-          <IPQueryForm />
-        </section>
+      <h1 className="sr-only">IP 地址查询</h1>
+      <div className="site-top">
+        <SiteNav />
         {isLoading ? (
-          <div role="status" aria-label="正在查询 IP 信息" className="ui-card p-6 sm:p-7">
-            <div className="h-7 w-44 rounded-md bg-[rgb(var(--color-surface-hover))]" />
-            <div className="mt-4 h-4 w-64 max-w-full rounded-md bg-[rgb(var(--color-surface-hover))]" />
-            <div className="mt-7 grid gap-5 sm:grid-cols-2"><div className="h-48 rounded-xl bg-[rgb(var(--color-surface-hover))]" /><div className="h-48 rounded-xl bg-[rgb(var(--color-surface-hover))]" /></div>
-            <span className="mt-4 block text-xs text-[rgb(var(--color-text-muted))]">正在查询 IP 信息…</span>
-          </div>
+          <ResultStage>
+            <div role="status" aria-label="正在查询 IP 信息" className="id-card id-card-loading"><span /><span /><span /></div>
+          </ResultStage>
         ) : ipData ? <IPInfoCard key={ipData.ip} ipData={ipData} /> : (
-          <div className="ui-card ui-empty-state py-16">
-            <Search className="mx-auto mb-4 h-7 w-7 text-[rgb(var(--color-text-muted))]" />
-            <p className="font-medium text-[rgb(var(--color-text-primary))]">{error ? "暂时无法获取 IP 信息" : "从一个 IP 地址开始"}</p>
-            <p className="mt-2 text-sm">输入地址查询，或选择“查询我的 IP”</p>
-          </div>
+          <ResultStage>
+            <div className="id-card">
+              <p className="id-eyebrow">{error ? "查询失败" : "开始查询"}</p>
+              <p className="id-empty-title">{error ? "暂时无法获取 IP 信息" : "从一个 IP 地址开始"}</p>
+              <p className="id-empty-text">{error ?? "在上方输入 IPv4 或 IPv6 地址，或查询你当前的 IP。"}</p>
+              <div className="id-actions">
+                <button type="button" className="id-button id-button-primary" onClick={() => executeQuery()}><LocateFixed />查询我的 IP</button>
+                <button type="button" className="id-button font-mono" onClick={() => executeQuery("8.8.8.8")}>8.8.8.8</button>
+              </div>
+            </div>
+          </ResultStage>
         )}
-      </main>
+      </div>
       <footer className="site-footer">
         IP Search <span aria-hidden="true">·</span> IP 定位由数据库估算，实际位置与精度可能因网络而异
       </footer>

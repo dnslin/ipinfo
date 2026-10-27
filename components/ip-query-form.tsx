@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { LocateFixed } from "lucide-react";
 import { useIPQueryStore } from "@/lib/store";
 import { isValidIP, checkPrivateIP } from "@/lib/ip-detection";
 import { IPQueryInput } from "@/components/ui/ip-query-input";
@@ -9,7 +8,7 @@ import { toast } from "sonner";
 
 export default function IPQueryForm() {
   const [inputValue, setInputValue] = useState("");
-  const { setQuery, executeQuery, isLoading, error, clearError } = useIPQueryStore();
+  const { setQuery, executeQuery, isLoading, clearError } = useIPQueryStore();
   const changeInput = (value: string) => { setInputValue(value); clearError(); };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -37,19 +36,5 @@ export default function IPQueryForm() {
     await executeQuery();
   };
 
-  return (
-    <div className="w-full">
-      <IPQueryInput value={inputValue} disabled={isLoading} onChange={(event) => changeInput(event.target.value)} onSubmit={submit} />
-      {error && <p role="alert" className="mt-3 text-left text-sm text-[rgb(var(--color-error))]">{error}</p>}
-      <div className="query-extras">
-        <button type="button" disabled={isLoading} onClick={queryMyIP} className="ui-button gap-1.5">
-          <LocateFixed className="h-3.5 w-3.5" />查询我的 IP
-        </button>
-        <span className="h-3 w-px bg-[rgb(var(--color-border))]" aria-hidden="true" />
-        <span>试一试</span>
-        <button type="button" disabled={isLoading} onClick={() => changeInput("8.8.8.8")} className="ui-button" aria-label="填入 IPv4 示例 8.8.8.8"><span className="font-mono">8.8.8.8</span></button>
-        <button type="button" disabled={isLoading} onClick={() => changeInput("2001:4860:4860::8888")} className="ui-button" aria-label="填入 IPv6 示例">IPv6 示例</button>
-      </div>
-    </div>
-  );
+  return <IPQueryInput value={inputValue} disabled={isLoading} onChange={(event) => changeInput(event.target.value)} onSubmit={submit} onLocate={queryMyIP} />;
 }

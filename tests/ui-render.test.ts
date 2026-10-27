@@ -19,8 +19,9 @@ const ipData: IPInfo = {
 test("IP results render missing coordinates explicitly instead of crashing or showing zero", () => {
   const html = renderToStaticMarkup(createElement(IPInfoCard, { ipData }));
   const text = html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ");
-  assert.match(text, /纬度 未提供/);
-  assert.match(text, /经度 未提供/);
+  assert.match(text, /坐标 未提供 数据库未提供坐标/);
+  assert.match(text, /此 IP 的数据库记录未提供有效坐标/);
+  assert.doesNotMatch(text, /0\.0000/);
 });
 
 test("an anycast record without a country or city explains the missing location", () => {
@@ -41,7 +42,7 @@ test("local address results identify their actual source instead of a GeoIP data
   }));
   assert.match(html, /本地地址分类/);
   assert.doesNotMatch(html, />MaxMind</);
-  assert.doesNotMatch(html, /更多信息/, "local records without metadata must not show an empty disclosure");
+  assert.match(html, /本地网络地址没有公网地理位置/);
 });
 
 test("local IPv6 classification comes from the query result rather than repeated string rules", () => {
@@ -52,11 +53,11 @@ test("local IPv6 classification comes from the query result rather than repeated
   assert.match(html, /title="私有地址"/);
 });
 
-test("additional IP information comes before the map in the reading and keyboard order", () => {
+test("the result reads as identity, then summary, then the full record", () => {
   const html = renderToStaticMarkup(createElement(IPInfoCard, { ipData: { ...ipData, timezone: "Asia/Shanghai" } }));
-  assert.ok(html.indexOf("地理位置") < html.indexOf("网络信息"));
-  assert.ok(html.indexOf("网络信息") < html.indexOf("更多信息"));
-  assert.ok(html.indexOf("更多信息") < html.indexOf("地图位置"));
+  const order = ["IP 查询结果", "运营商 / 组织", "地理位置", "网络与注册"].map((label) => html.indexOf(label));
+  assert.ok(order.every((index) => index >= 0), "every result section is rendered");
+  assert.deepEqual(order, [...order].sort((a, b) => a - b));
 });
 
 test("the compact result keeps detailed location, network and registration information", () => {
@@ -106,4 +107,13 @@ test("automatic local results do not offer public-network proxy detection", () =
     assert.match(html, /当前连接 IP/);
     assert.doesNotMatch(html, />代理检测<\/button>/);
   } finally { initial.isAutoDetected = wasAutoDetected; }
+});
+
+test("long IPv6 results size the title by length and widen the identity card", () => {
+  const ip = "2409:8a55:3a2b:1c40:5d3e:8f21:a6b7:9c01";
+  const html = renderToStaticMarkup(createElement(IPInfoCard, { ipData: { ...ipData, ip, ipVersion: "IPv6" } }));
+  assert.match(html, /data-long="true"/);
+  assert.match(html, new RegExp(`--ip-chars:${ip.length}`));
+  const short = renderToStaticMarkup(createElement(IPInfoCard, { ipData }));
+  assert.doesNotMatch(short, /data-long/);
 });
