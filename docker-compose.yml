@@ -11,6 +11,9 @@ services:
       - ./data:/app/lib/data
     environment:
       - NODE_ENV=production
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,::1}
     restart: unless-stopped
 
 # 可选：如果你想使用命名卷而不是绑定挂载

@@ -19,6 +19,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 # Docker 会把 HOSTNAME 设为容器 ID，显式监听所有地址
 ENV HOSTNAME=0.0.0.0
+# Node 24 原生读取 HTTP_PROXY / HTTPS_PROXY / NO_PROXY；未配置代理时保持直连。
+ENV NODE_USE_ENV_PROXY=1
 
 # 拷贝 standalone 产物和静态文件
 COPY --from=builder /app/.next/standalone ./
@@ -27,7 +29,8 @@ COPY --from=builder /app/public ./public
 
 # GeoIP 数据库不打进镜像：服务启动时在后台下载到 lib/data，之后按 GEOIP_UPDATE_INTERVAL 定期检查更新。
 # 目录需对 node 用户可写，下载器才能落盘。
-RUN mkdir -p /app/lib/data && chown -R node:node /app/lib/data
+RUN mkdir -p /app/lib/data /app/.next/cache/map-tiles \
+  && chown -R node:node /app/lib/data /app/.next/cache
 
 # 声明数据卷，用于持久化已下载的数据库
 VOLUME ["/app/lib/data"]

@@ -13,10 +13,10 @@ export interface TileProvider {
   maxZoom: number;
 }
 
-// 浏览器直接请求底图，保留 Referer、HTTP 缓存与可见署名。
+// 浏览器请求同源底图接口，由服务端缓存并在过期后向 OSM 条件重验。
 const openStreetMap: TileProvider = {
   name: "OpenStreetMap",
-  url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  url: "/api/map/{z}/{x}/{y}.png",
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   maxZoom: 19,
 };

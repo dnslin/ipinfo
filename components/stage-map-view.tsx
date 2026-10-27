@@ -5,6 +5,7 @@ import { Circle, MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
 import { DivIcon, point, type LatLngTuple } from "leaflet";
 import { RefreshCw } from "lucide-react";
 import { MAP_TILE_PROVIDERS } from "@/lib/geoip/map-types";
+import { moveMapCamera } from "@/lib/map-camera";
 
 const wideQuery = "(min-width: 761px)";
 const subscribeWide = (onChange: () => void) => {
@@ -31,13 +32,9 @@ function Frame({ center, zoom, wide }: { center: LatLngTuple; zoom: number; wide
     const offset = wide ? point(-Math.min(260, size.x * 0.2), 0) : point(0, 40);
     const target = map.unproject(map.project(center, zoom).add(offset), zoom);
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!placed.current || reduceMotion) {
-      map.setView(target, zoom, { animate: false });
-      placed.current = true;
-    } else {
-      // 两次查询之间飞过去，说明新位置相对上一个位置在哪里。
-      map.flyTo(target, zoom, { duration: 1.1, easeLinearity: 0.3 });
-    }
+    moveMapCamera(map, target, zoom, placed.current && !reduceMotion);
+    placed.current = true;
+    return () => { map.stop(); };
   }, [map, center, zoom, wide]);
   return null;
 }
