@@ -1,3 +1,4 @@
+import { singleton } from "../singleton";
 import { CacheEntry, QueryConfig } from "./types";
 import { IPInfo } from "../store";
 
@@ -290,4 +291,4 @@ export class IPQueryCache {
 }
 
 // 全局缓存实例
-export const globalIPCache = new IPQueryCache();
+export const globalIPCache = singleton("ipCache", () => new IPQueryCache());

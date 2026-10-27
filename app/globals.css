@@ -164,7 +164,9 @@ html.theme-changing *::after { transition: none !important; }
 .site-page { min-height: 100dvh; display: flex; flex-direction: column; }
 .site-top { position: relative; }
 .site-footer { padding: 40px 16px 32px; margin-top: auto; text-align: center; color: rgb(var(--color-text-muted)); font-size: 12px; }
-.site-footer > span { margin-inline: 6px; }
+.site-footer span[aria-hidden] { margin-inline: 6px; }
+.site-footer-db { margin-top: 6px; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; }
+.site-footer-db > span[data-missing] { color: rgb(var(--color-warning)); }
 
 /* 导航浮在地图上：品牌 | 查询框 | 版本与主题 */
 .site-nav { position: absolute; inset: 0 0 auto; z-index: 600; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px) minmax(0, 1fr); align-items: center; gap: 20px; padding: 20px 32px; }
@@ -188,6 +190,12 @@ html.theme-changing *::after { transition: none !important; }
 .id-stack-item button { max-width: 100%; border-radius: 4px; text-align: left; overflow-wrap: anywhere; color: rgb(var(--color-accent-text)); }
 .id-stack-item[data-current] button { color: rgb(var(--color-text-primary)); }
 .id-stack-missing { color: rgb(var(--color-text-muted)); }
+.id-resolved { margin-top: 16px; padding-top: 12px; border-top: 1px solid rgb(var(--color-border-light)); }
+.id-resolved-title { font-size: 12px; color: rgb(var(--color-text-muted)); }
+.id-resolved-title .font-mono { color: rgb(var(--color-text-secondary)); }
+.id-resolved-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.id-resolved-list button { padding: 2px 8px; border: 1px solid rgb(var(--color-border-light)); border-radius: 6px; font-size: 12px; color: rgb(var(--color-accent-text)); transition: background-color 120ms ease; }
+.id-resolved-list button[aria-current] { border-color: transparent; background: rgb(var(--color-accent-soft)); color: rgb(var(--color-text-primary)); }
 
 .query-bar { display: flex; align-items: center; gap: 6px; height: 52px; padding: 0 6px 0 16px; border: 1px solid rgb(var(--color-glass-border)); border-radius: 14px; background: rgb(var(--color-glass-background)); backdrop-filter: blur(14px) saturate(1.4); box-shadow: 0 6px 24px rgb(20 40 40 / .08); }
 .query-bar { transition: border-color 160ms ease, box-shadow 160ms ease; }
@@ -287,6 +295,7 @@ html.theme-changing *::after { transition: none !important; }
 .site-body > :nth-child(1) { animation-delay: 60ms; }
 .site-body > :nth-child(2) { animation-delay: 100ms; }
 .site-body > :nth-child(3) { animation-delay: 140ms; }
+.site-body > :nth-child(4) { animation-delay: 180ms; }
 .id-card-loading span { animation: skeleton-pulse 1.2s ease-in-out infinite; }
 @keyframes skeleton-pulse { 50% { opacity: .45; } }
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; padding: 4px 8px 0; }
@@ -315,7 +324,44 @@ html.theme-changing *::after { transition: none !important; }
 .proxy-sources dt { margin-bottom: 4px; font-size: 12px; color: rgb(var(--color-text-muted)); }
 .proxy-sources dd { font-size: 14px; overflow-wrap: anywhere; }
 .proxy-meta { margin-top: 12px; font-size: 12px; color: rgb(var(--color-text-muted)); }
+.intel-pending { display: inline-block; width: 40%; max-width: 180px; height: 12px; border-radius: 5px; background: rgb(var(--color-border)); vertical-align: middle; animation: skeleton-pulse 1.2s ease-in-out infinite; }
+.intel-muted { color: rgb(var(--color-text-muted)); }
+.intel-note { display: block; margin-top: 2px; font-size: 12px; }
+.intel-error { color: rgb(var(--color-warning)); }
+.intel-badge { display: inline-flex; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgb(var(--color-surface-hover)); color: rgb(var(--color-text-secondary)); }
+.intel-badge[data-tone=good] { background: rgb(var(--color-success) / .14); color: rgb(var(--color-success)); }
+.intel-badge[data-tone=bad] { background: rgb(var(--color-error) / .12); color: rgb(var(--color-error)); }
+.intel-link { display: inline-flex; align-items: center; gap: 3px; margin-right: 10px; border-radius: 4px; color: rgb(var(--color-accent-text)); text-decoration: none; }
+.intel-link svg { width: 14px; height: 14px; }
 
+
+/* ---------- 批量查询 ---------- */
+.batch-nav { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 32px; }
+.batch-nav .site-brand { color: inherit; text-decoration: none; }
+.batch-main { display: grid; gap: 24px; width: min(1120px, calc(100vw - 64px)); margin: 12px auto 0; }
+.batch-heading h1 { margin-top: 10px; font-size: 28px; font-weight: 650; letter-spacing: -.02em; }
+.batch-heading p { margin-top: 6px; max-width: 64ch; font-size: 14px; color: rgb(var(--color-text-secondary)); }
+.batch-back { display: inline-flex; align-items: center; gap: 6px; border-radius: 4px; font-size: 13px; color: rgb(var(--color-accent-text)); text-decoration: none; }
+.batch-back svg { width: 15px; height: 15px; }
+.batch-form { padding: 16px; border: 1px solid rgb(var(--color-border)); border-radius: var(--panel-radius); background: rgb(var(--color-surface)); box-shadow: var(--panel-shadow); transition: border-color 160ms ease, box-shadow 160ms ease; }
+.batch-form:focus-within { border-color: rgb(var(--color-focus-ring)); box-shadow: 0 0 0 4px rgb(var(--color-focus-ring) / .14); }
+.batch-input { display: block; width: 100%; min-height: 168px; padding: 6px 8px; resize: vertical; border: 0; background: transparent; color: rgb(var(--color-text-primary)); font-size: 14px; line-height: 1.7; outline: none; }
+.batch-input::placeholder { color: rgb(var(--color-text-muted)); }
+.batch-input:focus-visible { outline: none; }
+.batch-form-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgb(var(--color-border-light)); }
+.batch-count { font-size: 13px; color: rgb(var(--color-text-muted)); }
+.batch-count[data-over] { color: rgb(var(--color-error)); }
+.batch-form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.batch-results-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.batch-results-head h2 { font-size: 15px; font-weight: 650; }
+.batch-results-head h2 span { margin-left: 6px; font-size: 13px; font-weight: 400; color: rgb(var(--color-text-muted)); }
+.batch-table-wrap { overflow-x: auto; border: 1px solid rgb(var(--color-border)); border-radius: var(--panel-radius); background: rgb(var(--color-surface)); }
+.batch-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.batch-table th { position: sticky; top: 0; padding: 10px 14px; background: rgb(var(--color-surface-hover)); color: rgb(var(--color-text-muted)); font-size: 12px; font-weight: 600; text-align: left; white-space: nowrap; }
+.batch-table td { padding: 10px 14px; border-top: 1px solid rgb(var(--color-border-light)); vertical-align: top; overflow-wrap: anywhere; }
+.batch-table td.font-mono { white-space: nowrap; }
+.batch-table td a { border-radius: 4px; color: rgb(var(--color-accent-text)); text-decoration: none; }
+.batch-table tr[data-error] td:last-child { color: rgb(var(--color-error)); }
 
 /* ---------- BGP 邻接观测 ---------- */
 /* 方向配色：上游主色、下游琥珀、不确定中性灰，列表、关系图和图例共用。 */
@@ -466,6 +512,10 @@ html.theme-changing *::after { transition: none !important; }
   .detail-grid { grid-template-columns: 1fr; gap: 28px; padding: 0 4px; }
   .proxy-panel { padding: 18px; }
   .proxy-sources { grid-template-columns: 1fr; }
+  .batch-nav { padding: 14px 16px; }
+  .batch-main { width: auto; margin: 4px 16px 0; }
+  .batch-heading h1 { font-size: 24px; }
+  .batch-input { font-size: 16px; }
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -475,6 +525,8 @@ html.theme-changing *::after { transition: none !important; }
   .id-button-primary:not(:disabled):hover { background: rgb(var(--color-text-primary) / .88); }
   .query-locate:not(:disabled):hover { background: rgb(var(--color-surface-hover)); color: rgb(var(--color-text-primary)); }
   .stat-link:hover { text-decoration: underline; }
+  .batch-table td a:hover, .batch-back:hover, .intel-link:hover { text-decoration: underline; }
+  .id-resolved-list button:not(:disabled):hover { background: rgb(var(--color-surface-hover)); }
   .stat-link:hover svg { transform: translate(2px, -2px); }
   .query-submit:not(:disabled):hover svg { transform: translateX(2px); }
   .stat-copy:hover .icon-swap { opacity: 1; }

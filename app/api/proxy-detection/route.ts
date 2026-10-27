@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { detectProxy, ProxyDetectionResult } from "@/lib/ip-detection";
+import { guarded } from "@/lib/api-guard";
 
 /**
  * 代理检测API路由
  * GET请求：检测当前客户端的代理使用情况
  */
-export async function GET(request: NextRequest) {
+async function detect(request: NextRequest) {
   try {
     console.log("开始代理检测...");
     
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest) {
 /**
  * POST请求：检测指定IP的代理情况（可选功能）
  */
-export async function POST(request: NextRequest) {
+async function detectEnabled(request: NextRequest) {
   try {
     const body = await request.json();
     const { enableProxyDetection } = body;
@@ -79,3 +80,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const GET = guarded(detect, 3);
+export const POST = guarded(detectEnabled, 3);

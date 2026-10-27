@@ -16,11 +16,16 @@
 ## 功能
 
 - **本地数据库查询**：MaxMind GeoLite2 City / ASN 与 GeoCN 合并，中国地区精确到区县与运营商，查询不经过第三方。
+- **域名与批量查询**：输入域名会解析全部 A/AAAA 记录并可逐个切换；批量页面一次查询最多 100 个 IP 或域名，可导出 CSV。
+- **可分享的链接**：查询结果写入地址栏（`/?q=1.1.1.1`），也可以直接访问 `/1.1.1.1`；浏览器前进后退会切换查询。
+- **命令行友好**：`curl` 首页只返回 IP，`curl host/8.8.8.8` 返回对齐的文本摘要，`/json` 返回 JSON。
+- **路由与注册信息**：反向解析（PTR）、BGP 前缀与 RPKI 验证状态、RDAP 注册信息与滥用举报邮箱。
 - **单域名双栈检测**：同时显示访客的 IPv4 和 IPv6 出口，服务器不需要 IPv6，也不需要额外的子域名。
 - **地图定位**：Leaflet + OpenStreetMap，按数据库给出的精度半径标出估算范围；没有坐标时明确说明原因。
 - **BGP 邻接观测**：基于 RIPE RIS，按 AS 路径方向区分上游侧与下游侧，附网络名称、观测强度和关系图，可逐级查看邻居的邻接。
-- **补充数据源**：可选的美团溯源与代理检测，失败时保留原始结果，不用其他来源冒充。
-- **开箱即用的部署**：单个 Docker 镜像，数据库首次启动时自动下载并持久化，以非 root 用户运行。
+- **补充数据源**：可选的美团溯源、代理检测与 WebRTC 泄露检测，失败时保留原始结果，不用其他来源冒充。
+- **开箱即用的部署**：单个 Docker 镜像，数据库启动时自动下载、定期检查更新并持久化，自带健康检查，以非 root 用户运行。
+- **API 限流与 Token**：按来源地址限流，携带 Token 的请求不受限制，管理操作需要 Token。
 - **深浅主题**与适配手机的布局。
 
 ## 快速开始
@@ -34,7 +39,7 @@ docker run -d --name ipinfo -p 3000:3000 \
   ghcr.io/dnslin/ipinfo:latest
 ```
 
-访问 <http://localhost:3000>。首次启动会下载约 70 MB 的数据库到 `./data`，之后重启直接复用。
+访问 <http://localhost:3000>。首次启动会在后台下载约 70 MB 的数据库到 `./data`，之后重启直接复用，并每 24 小时检查一次新版本。
 
 ### Docker Compose
 
@@ -70,7 +75,7 @@ proxy_set_header X-Real-IP $remote_addr;
 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 ```
 
-没有转发头时，首页会改用浏览器检测到的地址。
+没有转发头时，首页会改用浏览器检测到的地址。限流同样按这些请求头识别来源；没有转发头时所有请求共用一个配额，公开部署请务必配置。
 
 ## 配置
 
@@ -82,6 +87,11 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 | `HOSTNAME` | `0.0.0.0` | 监听地址 |
 | `IPV4_PROBE_URLS` | ip.sb、ipify、icanhazip | 浏览器检测 IPv4 出口的接口，逗号分隔 |
 | `IPV6_PROBE_URLS` | ip.sb、ipify、icanhazip | 浏览器检测 IPv6 出口的接口，逗号分隔 |
+| `API_RATE_LIMIT` | `120` | 每个来源地址每分钟的 API 请求数，`0` 关闭限流。批量查询每 10 条计 1 次 |
+| `API_TOKEN` | 无 | 设置后，携带 `Authorization: Bearer <token>` 或 `X-API-Token` 的请求不受限流，`POST /api/init` 也必须携带 |
+| `GEOIP_UPDATE_INTERVAL` | `24` | 检查数据库新版本的间隔（小时），`0` 关闭自动更新 |
+| `GEOIP_PRELOAD` | `1` | 启动时在后台下载并打开数据库；设为 `0` 改为首次查询时加载 |
+| `DNS_SERVERS` | 系统配置 | 域名查询与反向解析使用的 DNS 服务器，逗号分隔，例如 `223.5.5.5,1.1.1.1` |
 
 ### 自建双栈探测入口
 
@@ -94,24 +104,44 @@ IPV6_PROBE_URLS=https://ip6.example.com/api/ip
 
 这时服务器需要能通过 IPv6 访问。不配置时，服务器只有 IPv4 也能正常显示访客的 IPv6。
 
+## 命令行
+
+`curl`、`wget`、HTTPie、PowerShell 等客户端访问时返回纯文本，浏览器访问同样的路径会跳转到网页：
+
+```bash
+curl ip.example.com                 # 只输出你的 IP
+curl ip.example.com/info            # 你的 IP 的文本摘要
+curl ip.example.com/8.8.8.8         # 指定 IP 或域名的文本摘要
+curl ip.example.com/json            # 你的 IP 的 JSON
+curl ip.example.com/example.com/json
+```
+
 ## API
 
-所有接口都返回 JSON，并允许跨域访问。
+所有接口都返回 JSON（命令行入口除外），并允许跨域访问。除 `/api/ip` 与 `/api/health` 外都受限流约束，响应带有 `X-RateLimit-Limit`、`X-RateLimit-Remaining`，超出时返回 429 与 `Retry-After`。
 
 | 路径 | 方法 | 说明 |
 | --- | --- | --- |
 | `/api/ip` | GET | 回显当前连接的来源地址，不查数据库 |
-| `/api/query` | GET | 查询访客自己的 IP |
-| `/api/query` | POST | 查询指定 IP，请求体 `{"ip": "8.8.8.8"}` |
+| `/api/query` | GET | 查询访客自己的 IP；带 `?q=` 时查询指定 IP 或域名 |
+| `/api/query` | POST | 查询指定 IP 或域名 `{"ip": "8.8.8.8"}`；批量查询 `{"ips": ["8.8.8.8", "example.com"]}`，最多 100 条 |
+| `/api/network?ip=` | GET | 反向解析、BGP 前缀与 RPKI、RDAP 注册信息，三项分别返回成功或失败 |
 | `/api/bgp/{asn}` | GET | ASN 的 BGP 邻接观测，含方向、观测强度和网络名称 |
 | `/api/meituan` | POST | 美团补充位置，请求体 `{"ip": "..."}`；未收录返回 404 |
 | `/api/proxy-detection` | POST | 代理检测，请求体需包含 `"enableProxyDetection": true` |
-| `/api/init` | GET / POST | 查看数据库状态 / 重新下载缺失的数据库 |
+| `/api/health` | GET | 健康检查：数据库版本、构建日期与更新状态；City 库不可用时返回 503 |
+| `/api/init` | GET / POST | 查看数据库状态 / 补齐缺失的数据库；`{"update": true}` 立即检查更新（需要 `API_TOKEN`） |
 
 ```bash
 curl -s -X POST http://localhost:3000/api/query \
   -H 'Content-Type: application/json' -d '{"ip":"1.1.1.1"}'
+
+# 立即检查数据库更新
+curl -s -X POST http://localhost:3000/api/init \
+  -H "Authorization: Bearer $API_TOKEN" -H 'Content-Type: application/json' -d '{"update":true}'
 ```
+
+按域名查询时，结果额外包含 `resolvedFrom: {domain, addresses}`。只解析到内网或保留地址的域名会被拒绝，避免暴露服务器所在网络的内部 DNS。
 
 ## 工作原理
 
@@ -123,15 +153,21 @@ curl -s -X POST http://localhost:3000/api/query \
 | `GeoLite2-ASN.mmdb` | [P3TERX/GeoLite.mmdb](https://github.com/P3TERX/GeoLite.mmdb) | ASN 与组织名称 |
 | `GeoCN.mmdb` | [ljxi/GeoCN](https://github.com/ljxi/GeoCN) | 中国地区的省市区与运营商 |
 | BGP 邻接 | [RIPEstat asn-neighbours](https://stat.ripe.net/docs/data-api/api-endpoints/asn-neighbours) | RIS 路由观测 |
+| 前缀与 RPKI | RIPEstat `network-info`、`rpki-validation` | IP 所在的宣告前缀、起源 AS 与 ROA 验证 |
+| 注册信息 | [RDAP](https://about.rdap.org/)（经 rdap.org 跳转到对应 RIR） | 网段名称、所属机构、滥用举报邮箱 |
 | 地图底图 | [OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/) | 浏览器按视图加载，保留署名 |
 
-数据库保存在 `lib/data/`，缺失或损坏时自动下载，已有的有效文件不会被定期更新；需要更新时删除文件后调用 `POST /api/init`。只有 City 库是必需的，ASN 和 GeoCN 不可用时基础查询照常工作。GeoCN 只补充地区和运营商，地图坐标始终使用 MaxMind 的数据，不会根据地名推算坐标。
+数据库保存在 `lib/data/`，缺失或损坏时自动下载。服务每隔 `GEOIP_UPDATE_INTERVAL` 小时比较一次 GitHub Release 的版本标签，标签变化才下载，新文件校验通过且构建时间不早于当前文件时原子替换，并重新打开数据库、清空查询缓存；下载失败时继续使用旧文件。版本记录在 `lib/data/versions.json`，页脚会显示各库的构建日期。只有 City 库是必需的，ASN 和 GeoCN 不可用时基础查询照常工作。GeoCN 只补充地区和运营商，地图坐标始终使用 MaxMind 的数据，不会根据地名推算坐标。
 
 IP 定位只能反映网络出口的大致位置，不代表设备或街道位置；公共 DNS 等任播地址可能没有坐标。
 
 ### 双栈检测
 
 浏览器先请求本站 `/api/ip`，得到当前连接所用协议的地址；另一种协议的地址由浏览器并行请求单栈探测接口获得，取第一个有效结果，最多等待 4 秒。这些接口的域名只有 A 或只有 AAAA 记录，因此返回的一定是对应协议的出口地址。私有和回环地址不计入。
+
+### WebRTC 泄露检测
+
+浏览器向 STUN 服务器（Google、Cloudflare）请求候选地址，其中的 srflx 地址就是 WebRTC 看到的公网出口。它与网页请求的出口（双栈检测结果）不同时，说明代理或 VPN 没有接管 WebRTC 流量。检测只在浏览器中进行，结果不会发送到服务器。
 
 ### BGP 方向
 
@@ -155,7 +191,11 @@ components/     界面组件（components/bgp/ 为 BGP 面板）
 lib/geoip/      数据库下载、读取、缓存与合并
 lib/dual-stack.ts  IPv4/IPv6 单栈探测
 lib/ip-detection.ts 访客 IP 识别与代理检测
-proxy.ts        安全响应头与 API 跨域设置
+lib/lookup.ts   IP 与域名查询、批量查询
+lib/network-intel.ts 前缀、RPKI 与 RDAP
+lib/api-guard.ts 限流与 Token
+instrumentation.ts 启动时预加载数据库并开启定期更新
+proxy.ts        命令行入口、安全响应头与 API 跨域设置
 ```
 
 ### 发布

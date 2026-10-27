@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useIPQueryStore } from "@/lib/store";
 import { isValidIP, checkPrivateIP } from "@/lib/ip-detection";
+import { isValidDomain } from "@/lib/domain";
 import { IPQueryInput } from "@/components/ui/ip-query-input";
 import { toast } from "sonner";
 
@@ -47,11 +48,11 @@ export default function IPQueryForm() {
     event.preventDefault();
     if (isLoading) return;
     const ip = inputValue.trim();
-    if (ip && !isValidIP(ip)) {
-      reject("IP 地址格式错误", "请输入有效的 IPv4 或 IPv6 地址");
+    if (ip && !isValidIP(ip) && !isValidDomain(ip)) {
+      reject("无法识别的查询内容", "请输入有效的 IPv4、IPv6 地址或域名");
       return;
     }
-    if (ip) {
+    if (ip && isValidIP(ip)) {
       const privateAddress = checkPrivateIP(ip);
       if (privateAddress.isPrivate) {
         reject(privateAddress.message, privateAddress.description, true);

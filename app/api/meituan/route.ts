@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MeituanAPIService, MeituanLocationNotFoundError } from "@/lib/meituan-api";
 import { isValidIP } from "@/lib/ip-detection";
+import { guarded } from "@/lib/api-guard";
 
 // POST请求：使用美团API查询IP信息
-export async function POST(request: NextRequest) {
+async function lookup(request: NextRequest) {
   let ip: unknown;
   try {
     ip = (await request.json())?.ip;
@@ -49,3 +50,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const POST = guarded(lookup, 2);

@@ -1,3 +1,4 @@
+import { singleton } from "../singleton";
 import { AddressNotFoundError, Reader, type ReaderModel, type Asn } from "@maxmind/geoip2-node";
 import { Reader as MMDBReader } from "mmdb-lib";
 import { readFileSync } from "node:fs";
@@ -86,6 +87,11 @@ export class GeoIPReader {
     return results;
   }
 
+  // 已打开的数据库，供健康检查使用，不触发下载。
+  loaded(): { city: boolean; asn: boolean; geocn: boolean } {
+    return { city: this.cityReader !== null, asn: this.asnReader !== null, geocn: this.geocnReader !== null };
+  }
+
   destroy(): void {
     this.cityReader = null;
     this.asnReader = null;
@@ -93,4 +99,4 @@ export class GeoIPReader {
   }
 }
 
-export const geoIPReader = new GeoIPReader();
+export const geoIPReader = singleton("geoIPReader", () => new GeoIPReader());

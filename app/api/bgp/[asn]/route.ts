@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { guarded } from "@/lib/api-guard";
 import { splitASName, type BGPPeer, type BGPPosition, type ProcessedBGPData } from "@/lib/bgp-api";
 
 interface RISNeighbour {
@@ -48,8 +49,8 @@ function isRISNeighbour(value: unknown): value is RISNeighbour {
     && (neighbour.v6_peers === undefined || (Number.isInteger(neighbour.v6_peers) && neighbour.v6_peers >= 0));
 }
 
-export async function GET(
-  request: NextRequest,
+async function getNeighbours(
+  _request: NextRequest,
   context: { params: Promise<{ asn: string }> },
 ) {
   const { asn } = await context.params;
@@ -143,3 +144,5 @@ export async function GET(
     );
   }
 }
+
+export const GET = guarded(getNeighbours, 2);

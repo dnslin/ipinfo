@@ -25,7 +25,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# GeoIP 数据库不打进镜像：应用首次访问 /api/init 时自动下载到 lib/data。
+# GeoIP 数据库不打进镜像：服务启动时在后台下载到 lib/data，之后按 GEOIP_UPDATE_INTERVAL 定期检查更新。
 # 目录需对 node 用户可写，下载器才能落盘。
 RUN mkdir -p /app/lib/data && chown -R node:node /app/lib/data
 
@@ -36,5 +36,9 @@ VOLUME ["/app/lib/data"]
 USER node
 
 EXPOSE 3000
+
+# 首次启动需要下载数据库，给足启动时间；City 库可用即视为健康。
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+  CMD wget -qO /dev/null "http://127.0.0.1:${PORT:-3000}/api/health" || exit 1
 
 CMD ["node", "server.js"]
