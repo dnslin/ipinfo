@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { Reader } from "mmdb-lib";
 import { GeoIPError } from "./types";
+import { describeFetchError } from "../network";
 
 const DATABASE_URLS = {
   "GeoLite2-City.mmdb": "https://github.com/P3TERX/GeoLite.mmdb/releases/latest/download/GeoLite2-City.mmdb",
@@ -145,13 +146,15 @@ export class DatabaseDownloader {
   }
 
   // GitHub 的 latest 地址会 302 到带版本标签的地址，只取跳转目标，不下载文件。
-  private async resolveRelease(url: string): Promise<string | null> {
+  private async resolveRelease(url: string): Promise<{ source: string | null; reason?: string }> {
     try {
       const response = await fetch(url, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(15_000) });
       const location = response.headers.get("location");
-      return response.status >= 300 && response.status < 400 && location ? new URL(location, url).href : null;
-    } catch {
-      return null;
+      return response.status >= 300 && response.status < 400 && location
+        ? { source: new URL(location, url).href }
+        : { source: null, reason: `HTTP ${response.status}` };
+    } catch (error) {
+      return { source: null, reason: describeFetchError(error) };
     }
   }
 
@@ -175,14 +178,14 @@ export class DatabaseDownloader {
 
   private async downloadDatabase(filename: string): Promise<void> {
     const url = DATABASE_URLS[filename as DatabaseName];
-    const source = await this.resolveRelease(url);
+    const { source } = await this.resolveRelease(url);
     try {
       const { partialPath } = await this.fetchToPartial(filename, source ?? url);
       fs.renameSync(partialPath, this.getDatabasePath(filename));
       if (source) this.recordVersion(filename, source);
       this.errors.delete(filename);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = describeFetchError(error);
       this.errors.set(filename, message);
       console.warn(`数据库 ${filename} 下载失败 (${url}): ${message}`);
       throw new GeoIPError(`下载 ${filename} 失败: ${message}`, "DOWNLOAD_FAILED");
@@ -200,8 +203,8 @@ export class DatabaseDownloader {
       return Promise.all(statuses.map(async (status): Promise<UpdateResult> => {
         const { name } = status;
         if (!status.isValid) return { name, outcome: "skipped", message: "文件缺失或无效，等待重新下载" };
-        const source = await this.resolveRelease(DATABASE_URLS[name as DatabaseName]);
-        if (!source) return { name, outcome: "skipped", message: "无法获取远端版本" };
+        const { source, reason } = await this.resolveRelease(DATABASE_URLS[name as DatabaseName]);
+        if (!source) return { name, outcome: "skipped", message: `无法获取远端版本（${reason}）` };
         const version = releaseTag(source);
         if (versions[name as DatabaseName]?.source === source) return { name, outcome: "current", version };
 
@@ -217,7 +220,7 @@ export class DatabaseDownloader {
           this.errors.delete(name);
           return { name, outcome: "updated", version };
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message = describeFetchError(error);
           console.warn(`数据库 ${name} 更新失败 (${source}): ${message}`);
           return { name, outcome: "failed", version, message };
         }

@@ -93,6 +93,10 @@ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 | `GEOIP_PRELOAD` | `1` | 启动时在后台下载并打开数据库；设为 `0` 改为首次查询时加载 |
 | `DNS_SERVERS` | 系统配置 | 域名查询与反向解析使用的 DNS 服务器，逗号分隔，例如 `223.5.5.5,1.1.1.1` |
 
+### 出站连接
+
+BGP、RPKI、RDAP 与数据库更新需要服务器访问 RIPEstat、rdap.org 和 GitHub。Node 依次尝试域名的 IPv4/IPv6 地址时，默认每个地址只等 250 ms，跨洲线路（例如香港到 RIPE）上能连通的 IPv4 会被提前放弃，再落到不通的 IPv6 上，表现为 `fetch failed`。服务启动时会把这个间隔调到 2000 ms；如需其他值，可设置 `NODE_OPTIONS=--network-family-autoselection-attempt-timeout=<毫秒>`。外部请求失败时，日志和接口错误会列出每个尝试过的地址及原因，例如 `ETIMEDOUT 193.0.6.150:443`。
+
 ### 自建双栈探测入口
 
 默认的公共探测接口在部分网络下可能较慢。如果你有自己的域名，可以添加两个子域名指向本服务，一个只有 A 记录、一个只有 AAAA 记录，再改用它们的 `/api/ip`：

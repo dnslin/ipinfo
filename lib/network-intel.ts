@@ -1,3 +1,5 @@
+import { describeFetchError } from "./network";
+
 // 公网 IP 的路由与注册信息：BGP 前缀与 RPKI 来自 RIPEstat，注册信息来自 RDAP（经 rdap.org 跳转到对应的 RIR）。
 
 export type RPKIStatus = "valid" | "invalid_asn" | "invalid_length" | "unknown";
@@ -132,6 +134,6 @@ export async function settle<T>(task: Promise<T>): Promise<Section<T>> {
     return { ok: true, data: await task };
   } catch (error) {
     const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError" || (error as NodeJS.ErrnoException).code === "ETIMEOUT");
-    return { ok: false, error: timedOut ? "查询超时" : error instanceof Error ? error.message : "查询失败" };
+    return { ok: false, error: timedOut ? "查询超时" : error instanceof Error ? describeFetchError(error) : "查询失败" };
   }
 }
