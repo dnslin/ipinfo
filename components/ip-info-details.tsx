@@ -35,7 +35,7 @@ export function networkName(data: IPInfo): string | undefined {
 }
 
 export function locationParts(data: IPInfo): string[] {
-  return [...new Set([data.country, data.province, data.city, data.district, data.meituan?.areaName].filter((part): part is string => Boolean(part)))];
+  return [...new Set([data.country, data.province, data.city, data.district].filter((part): part is string => Boolean(part)))];
 }
 
 export function StatStrip({ data, onOpenBGP }: { data: IPInfo; onOpenBGP: (asn: number, name: string | undefined, trigger: HTMLButtonElement) => void }) {
@@ -94,7 +94,6 @@ export function regionLevels(data: IPInfo): RegionLevel[] {
     { label: "省份", name: data.province, code: data.provinceCode },
     { label: "城市", name: data.city, code: data.cityCode },
     { label: "区县", name: data.district, code: data.districtCode },
-    { label: "商圈", name: data.meituan?.areaName },
   ];
   // 直辖市等情况下省、市同名，只保留上一级。
   return levels.filter((level, index) => (level.name || level.code) && level.name !== levels[index - 1]?.name);
@@ -116,10 +115,9 @@ export function LocationDetails({ data }: { data: IPInfo }) {
           ))}
         </dl>
       ) : <p className="detail-empty">地区信息未提供</p>}
-      {(data.postal || data.meituan?.detail) && (
+      {data.postal && (
         <dl className="detail-rows">
-          {data.postal && <Row label="邮政编码" mono>{data.postal}</Row>}
-          {data.meituan?.detail && <Row label="补充地址">{data.meituan.detail}</Row>}
+          <Row label="邮政编码" mono>{data.postal}</Row>
         </dl>
       )}
     </section>

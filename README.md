@@ -23,7 +23,7 @@
 - **单域名双栈检测**：同时显示访客的 IPv4 和 IPv6 出口，服务器不需要 IPv6，也不需要额外的子域名。
 - **地图定位**：Leaflet + OpenStreetMap，按数据库给出的精度半径标出估算范围；没有坐标时明确说明原因。
 - **BGP 邻接观测**：基于 RIPE RIS，按 AS 路径方向区分上游侧与下游侧，附网络名称、观测强度和关系图，可逐级查看邻居的邻接。
-- **补充数据源**：可选的美团溯源、代理检测与 WebRTC 泄露检测，失败时保留原始结果，不用其他来源冒充。
+- **补充检测**：可选的代理检测与 WebRTC 泄露检测，失败时保留原始结果，不用其他来源冒充。
 - **开箱即用的部署**：单个 Docker 镜像，数据库启动时自动下载、定期检查更新并持久化，自带健康检查，以非 root 用户运行。
 - **API 限流与 Token**：按来源地址限流，携带 Token 的请求不受限制，管理操作需要 Token。
 - **深浅主题**与适配手机的布局。
@@ -127,7 +127,6 @@ curl ip.example.com/example.com/json
 | `/api/query` | POST | 查询指定 IP 或域名 `{"ip": "8.8.8.8"}`；批量查询 `{"ips": ["8.8.8.8", "example.com"]}`，最多 100 条 |
 | `/api/network?ip=` | GET | 反向解析、BGP 前缀与 RPKI、RDAP 注册信息，三项分别返回成功或失败 |
 | `/api/bgp/{asn}` | GET | ASN 的 BGP 邻接观测，含方向、观测强度和网络名称 |
-| `/api/meituan` | POST | 美团补充位置，请求体 `{"ip": "..."}`；未收录返回 404 |
 | `/api/proxy-detection` | POST | 代理检测，请求体需包含 `"enableProxyDetection": true` |
 | `/api/health` | GET | 健康检查：数据库版本、构建日期与更新状态；City 库不可用时返回 503 |
 | `/api/init` | GET / POST | 查看数据库状态 / 补齐缺失的数据库；`{"update": true}` 立即检查更新（需要 `API_TOKEN`） |

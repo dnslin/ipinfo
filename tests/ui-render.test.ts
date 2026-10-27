@@ -49,7 +49,6 @@ test("local IPv6 classification comes from the query result rather than repeated
   const html = renderToStaticMarkup(createElement(IPInfoCard, {
     ipData: { ...ipData, ip: "fe90::1", country: "本地网络", countryCode: "PRIVATE", source: "Local", ipVersion: "IPv6" },
   }));
-  assert.doesNotMatch(html, />美团溯源</);
   assert.match(html, /title="私有地址"/);
 });
 
@@ -64,13 +63,13 @@ test("the compact result keeps detailed location, network and registration infor
   const html = renderToStaticMarkup(createElement(IPInfoCard, { ipData: {
     ...ipData, country: "中国", countryCode: "CN", province: "浙江省", city: "杭州市",
     location: { latitude: 0, longitude: 0, accuracy_radius: 20, source: "MaxMind" },
-    postal: "310000", meituan: { detail: "文一路 100 号" },
+    postal: "310000",
     as: { number: 45102, name: "Alibaba (US) Technology Co., Ltd." },
     isp: "阿里云国际", net: "223.5.5.0/24", type: "数据中心",
     timezone: "Asia/Shanghai", registered_country: { code: "US", name: "美国" },
     provinceCode: "ZJ", cityCode: "HZ", districtCode: "XH",
   } }));
-  for (const detail of ["杭州市", "0.0000°", "310000", "文一路 100 号", "AS45102", "Alibaba (US) Technology Co., Ltd.", "阿里云国际", "223.5.5.0/24", "数据中心", "Asia/Shanghai", "注册国家", "ZJ", "HZ", "XH"]) {
+  for (const detail of ["杭州市", "0.0000°", "310000", "AS45102", "Alibaba (US) Technology Co., Ltd.", "阿里云国际", "223.5.5.0/24", "数据中心", "Asia/Shanghai", "注册国家", "ZJ", "HZ", "XH"]) {
     assert.ok(html.replace(/<[^>]*>/g, "").includes(detail), `result retains ${detail}`);
   }
 });

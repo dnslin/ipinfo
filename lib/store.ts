@@ -34,12 +34,12 @@ export interface IPInfo {
     latitude: number | null;
     longitude: number | null;
     accuracy_radius?: number;
-    source: "MaxMind" | "MeiTuan" | null;
+    source: "MaxMind" | null;
   };
   timezone?: string;
   postal?: string;
   accuracy: "high" | "medium" | "low";
-  source: "MaxMind" | "GeoCN" | "MeiTuan" | "Local";
+  source: "MaxMind" | "GeoCN" | "Local";
   ipVersion: "IPv4" | "IPv6";
   // 代理检测信息
   proxyDetection?: ProxyDetectionResult;
@@ -47,19 +47,6 @@ export interface IPInfo {
   resolvedFrom?: {
     domain: string;
     addresses: string[];
-  };
-  // 美团特有字段
-  meituan?: {
-    areaName?: string; // 区域名称，如"王府井/东单"
-    detail?: string; // 详细地址，如"正义路甲4号-B座"
-    cityPinyin?: string; // 城市拼音
-    openCityName?: string; // 开放城市名
-    isForeign?: boolean; // 是否为境外
-    dpCityId?: number; // 美团城市ID
-    area?: number; // 区域编号
-    parentArea?: number; // 父区域编号
-    fromwhere?: string; // 数据来源标识
-    adcode?: string; // 行政区划代码
   };
 }
 
