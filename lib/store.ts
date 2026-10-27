@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { toast } from "sonner";
-import { ProxyDetectionResult, detectIPVersion, detectProxyClient, isPrivateIP } from "@/lib/ip-detection";
+import { ProxyDetectionResult, PROXY_TYPE_LABELS, detectIPVersion, detectProxyClient, isPrivateIP } from "@/lib/ip-detection";
 import { DEFAULT_PROBES, probeAddress, type ProbeConfig, type StackVersion } from "@/lib/dual-stack";
 
 // IP信息接口定义
@@ -242,16 +242,20 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
     try {
       // 1. 先获取headers中的IP地址
       let headerIP: string | null = null;
+      let headerError: string | null = null;
       try {
-        const headerResponse = await fetch("/api/query", {
+        const headerResponse = await fetch("/api/ip", {
           method: "GET",
+          cache: "no-store",
         });
         if (headerResponse.ok) {
           const headerData = await headerResponse.json();
           headerIP = headerData.ip;
-          console.log("获取到headers IP:", headerIP);
+        } else {
+          headerError = `本站 IP 回显请求失败（HTTP ${headerResponse.status}）`;
         }
       } catch (error) {
+        headerError = `本站 IP 回显请求失败：${error instanceof Error ? error.message : "未知错误"}`;
         console.warn("获取headers IP失败:", error);
       }
 
@@ -259,6 +263,7 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
       const proxyResult: ProxyDetectionResult = await detectProxyClient(
         headerIP
       );
+      if (headerError) proxyResult.errors.unshift(headerError);
 
       // 更新当前IP数据，添加代理检测信息
       const currentData = get().ipData;
@@ -273,18 +278,8 @@ export const useIPQueryStore = create<IPQueryState>((set, get) => ({
         });
 
         // 显示检测结果提示
-        const proxyTypeText = {
-          direct: "直连",
-          domestic: "国内代理",
-          foreign: "国外代理",
-          mixed: "混合代理",
-          unknown: "未知",
-        }[proxyResult.proxyType];
-
         toast.success("代理检测完成", {
-          description: `检测结果: ${proxyTypeText} (置信度: ${Math.round(
-            proxyResult.confidence * 100
-          )}%)`,
+          description: PROXY_TYPE_LABELS[proxyResult.proxyType],
           duration: 4000,
         });
       }

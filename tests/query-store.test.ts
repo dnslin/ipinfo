@@ -110,7 +110,7 @@ function pendingProxyDetection() {
   const externalResponse = deferred<Response>();
   const started = deferred<void>();
   mock.method(globalThis, "fetch", (url: string) => {
-    if (url === "/api/query") {
+    if (url === "/api/query" || url === "/api/ip") {
       return Promise.resolve(Response.json(ipInfo("8.8.8.8")));
     }
     started.resolve();
@@ -158,4 +158,31 @@ test("proxy detection still attaches its result when the original query remains 
   assert.equal(useIPQueryStore.getState().ipData?.ip, "8.8.8.8");
   assert.equal(useIPQueryStore.getState().ipData?.proxyDetection?.headerIP, "8.8.8.8");
   assert.equal(useIPQueryStore.getState().isProxyDetecting, false);
+});
+
+test("proxy detection gets the current connection without depending on the GeoIP query", async () => {
+  useIPQueryStore.setState({ ipData: ipInfo("8.8.8.8"), isAutoDetected: true });
+  const urls: string[] = [];
+  mock.method(globalThis, "fetch", async (url: string) => {
+    urls.push(url);
+    if (url === "/api/ip") return Response.json({ ip: "8.8.8.8" });
+    if (url === "/api/query") return Response.json({ error: "数据库不可用" }, { status: 503 });
+    return new Response(url.includes("ipip.net") ? "当前 IP：8.8.8.8  来自于：中国" : "8.8.8.8");
+  });
+  await useIPQueryStore.getState().executeProxyDetection();
+  assert.ok(urls.includes("/api/ip"));
+  assert.equal(urls.includes("/api/query"), false);
+  assert.equal(useIPQueryStore.getState().ipData?.proxyDetection?.headerIP, "8.8.8.8");
+});
+
+test("proxy detection retains the status when the current-connection echo fails", async () => {
+  useIPQueryStore.setState({ ipData: ipInfo("8.8.8.8"), isAutoDetected: true });
+  mock.method(globalThis, "fetch", async (url: string) => {
+    if (url === "/api/ip") return Response.json({ error: "unavailable" }, { status: 503 });
+    return new Response(url.includes("ipip.net") ? "当前 IP：8.8.8.8  来自于：中国" : "8.8.8.8");
+  });
+  await useIPQueryStore.getState().executeProxyDetection();
+  const result = useIPQueryStore.getState().ipData?.proxyDetection;
+  assert.equal(result?.proxyType, "unknown");
+  assert.ok(result?.errors.some((error) => error.includes("HTTP 503")));
 });

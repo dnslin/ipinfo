@@ -7,8 +7,8 @@ export interface ProxyDetectionResult {
   foreignIP: string | null;
   isUsingProxy: boolean;
   proxyType: "direct" | "domestic" | "foreign" | "mixed" | "unknown";
-  confidence: number; // 检测置信度 0-1
-  errors: string[]; // API调用错误信息
+  confidence: number; // 出口比较证据强度，不是代理使用概率
+  errors: string[]; // 探测失败或无法比较的原因
   detectionTime: number; // 检测耗时(ms)
 }
 
@@ -391,260 +391,111 @@ export const IP_DETECTION_SOURCES: IPDetectionSource[] = [
   },
 ];
 
-/**
- * 从外部API获取IP地址
- * @param source IP检测源配置
- * @returns Promise<string | null> 获取到的IP地址或null
- */
-async function fetchExternalIP(
-  source: IPDetectionSource
-): Promise<string | null> {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), source.timeout);
-
-    const response = await fetch(source.url, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      },
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+// 只比较有效公网地址；URL 使用浏览器和 Node 共用的 IPv6 规范化规则。
+export function normalizePublicIP(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  let ip = value.trim();
+  const version = detectIPVersion(ip);
+  if (version === "invalid") return null;
+  if (version === "IPv6") {
+    ip = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
+    const mapped = ip.match(/^::ffff:([0-9a-f]+):([0-9a-f]+)$/);
+    if (mapped) {
+      const high = parseInt(mapped[1], 16);
+      const low = parseInt(mapped[2], 16);
+      ip = [high >> 8, high & 255, low >> 8, low & 255].join(".");
     }
-
-    const text = await response.text();
-    return source.parser(text);
-  } catch (error) {
-    console.error(`获取外部IP失败 (${source.name}):`, error);
-    return null;
   }
+  return isPrivateIP(ip) ? null : ip;
 }
 
-/**
- * 分析代理类型
- * @param headerIP 从HTTP headers获取的IP
- * @param domesticIP 从国内API获取的IP
- * @param foreignIP 从国外API获取的IP
- * @returns 代理类型和置信度
- */
+export const PROXY_TYPE_LABELS: Record<ProxyDetectionResult["proxyType"], string> = {
+  direct: "未发现出口差异",
+  domestic: "国内探测路径出口不同",
+  foreign: "国外探测路径出口不同",
+  mixed: "多条路径出口不同",
+  unknown: "暂无法判断",
+};
+
 function analyzeProxyType(
   headerIP: string | null,
   domesticIP: string | null,
-  foreignIP: string | null
-): { proxyType: ProxyDetectionResult["proxyType"]; confidence: number } {
-  const ips = [headerIP, domesticIP, foreignIP].filter(Boolean);
-
-  // 如果获取的IP数量不足，置信度较低
-  if (ips.length < 2) {
-    return { proxyType: "unknown", confidence: 0.3 };
+  foreignIP: string | null,
+  errors: string[],
+): Pick<ProxyDetectionResult, "proxyType" | "confidence"> {
+  if (!headerIP || !domesticIP || !foreignIP) {
+    errors.push("探测结果不完整，无法比较三条访问路径");
+    return { proxyType: "unknown", confidence: 0 };
   }
-
-  // 所有IP都相同 - 直连
-  if (ips.length >= 2 && ips.every((ip) => ip === ips[0])) {
-    return { proxyType: "direct", confidence: 0.9 };
+  const versions = [headerIP, domesticIP, foreignIP].map(detectIPVersion);
+  if (!versions.every((version) => version === versions[0])) {
+    errors.push("探测结果同时包含 IPv4 和 IPv6，不能把不同协议的出口差异判断为代理");
+    return { proxyType: "unknown", confidence: 0 };
   }
-
-  // 分析不同的组合
-  if (headerIP && domesticIP && foreignIP) {
-    if (headerIP === domesticIP && headerIP !== foreignIP) {
-      // headers IP = 国内IP ≠ 国外IP，可能使用国外代理
-      return { proxyType: "foreign", confidence: 0.8 };
-    }
-
-    if (headerIP === foreignIP && headerIP !== domesticIP) {
-      // headers IP = 国外IP ≠ 国内IP，可能使用国内代理
-      return { proxyType: "domestic", confidence: 0.8 };
-    }
-
-    if (
-      headerIP !== domesticIP &&
-      headerIP !== foreignIP &&
-      domesticIP !== foreignIP
-    ) {
-      // 三个IP都不同，复杂的代理环境
-      return { proxyType: "mixed", confidence: 0.7 };
-    }
-  }
-
-  // 其他情况
-  return { proxyType: "unknown", confidence: 0.5 };
+  if (headerIP === domesticIP && headerIP === foreignIP) return { proxyType: "direct", confidence: 0.9 };
+  if (headerIP === domesticIP) return { proxyType: "foreign", confidence: 0.8 };
+  if (headerIP === foreignIP) return { proxyType: "domestic", confidence: 0.8 };
+  return { proxyType: "mixed", confidence: 0.7 };
 }
 
-/**
- * 检测代理使用情况（服务端版本）
- * @param request NextRequest对象，用于获取headers中的IP
- * @returns Promise<ProxyDetectionResult> 代理检测结果
- */
-export async function detectProxy(
-  request?: NextRequest
-): Promise<ProxyDetectionResult> {
-  const startTime = Date.now();
-  const errors: string[] = [];
-
-  // 1. 获取headers中的IP
-  const headerIP = request ? getClientIP(request) : null;
-
-  // 2. 并行获取外部IP
-  const externalIPPromises = IP_DETECTION_SOURCES.map(async (source) => {
-    try {
-      const ip = await fetchExternalIP(source);
-      return { source: source.name, ip };
-    } catch (error) {
-      const errorMsg = `${source.name} 获取失败: ${
-        error instanceof Error ? error.message : "未知错误"
-      }`;
-      errors.push(errorMsg);
-      return { source: source.name, ip: null };
-    }
-  });
-
-  const results = await Promise.allSettled(externalIPPromises);
-
-  // 3. 提取结果
-  let domesticIP: string | null = null;
-  let foreignIP: string | null = null;
-
-  results.forEach((result, index) => {
-    if (result.status === "fulfilled") {
-      const { source, ip } = result.value;
-      if (source.includes("国内")) {
-        domesticIP = ip;
-      } else if (source.includes("国外")) {
-        foreignIP = ip;
-      }
-    } else {
-      errors.push(
-        `${IP_DETECTION_SOURCES[index].name} 请求失败: ${result.reason}`
-      );
-    }
-  });
-
-  // 4. 分析代理类型
-  const { proxyType, confidence } = analyzeProxyType(
-    headerIP,
-    domesticIP,
-    foreignIP
-  );
-
-  // 5. 判断是否使用代理
-  const isUsingProxy = proxyType !== "direct" && proxyType !== "unknown";
-
-  const detectionTime = Date.now() - startTime;
-
+function proxyResult(
+  headerIP: string | null,
+  domesticIP: string | null,
+  foreignIP: string | null,
+  errors: string[],
+  startTime: number,
+): ProxyDetectionResult {
+  const normalizedHeader = normalizePublicIP(headerIP);
+  if (!normalizedHeader) errors.push("本站未获取到当前连接的有效公网 IP");
+  const { proxyType, confidence } = analyzeProxyType(normalizedHeader, domesticIP, foreignIP, errors);
   return {
-    headerIP,
+    headerIP: normalizedHeader,
     domesticIP,
     foreignIP,
-    isUsingProxy,
+    // 仅表示观察到同协议出口差异，不能确认代理类型或排除全局代理。
+    isUsingProxy: proxyType !== "direct" && proxyType !== "unknown",
     proxyType,
     confidence,
     errors,
-    detectionTime,
+    detectionTime: Date.now() - startTime,
   };
 }
 
-/**
- * 检测代理使用情况（客户端版本）
- * 直接在浏览器中调用外部API，用户可以在控制台看到网络请求
- * @param headerIP 从服务端获取的headers IP
- * @returns Promise<ProxyDetectionResult> 代理检测结果
- */
-export async function detectProxyClient(
-  headerIP: string | null = null
-): Promise<ProxyDetectionResult> {
+// 服务端只能看到本站连接；外部出口必须由访问者的浏览器采样。
+export function detectProxy(
+  request?: NextRequest,
+  samples?: { domesticIP: string | null; foreignIP: string | null },
+): ProxyDetectionResult {
+  const errors = samples ? [] : ["请由浏览器请求国内和国外探测源，再提交 domesticIP 与 foreignIP；服务器出口不代表访问者出口"];
+  return proxyResult(
+    request ? getClientIP(request) : null,
+    samples?.domesticIP ?? null,
+    samples?.foreignIP ?? null,
+    errors,
+    Date.now(),
+  );
+}
+
+// 请求在浏览器里执行，采样到的才是访问者到各目标的出口。
+export async function detectProxyClient(headerIP: string | null = null): Promise<ProxyDetectionResult> {
   const startTime = Date.now();
   const errors: string[] = [];
-
-  console.log("开始客户端代理检测...", { headerIP });
-
-  // 并行获取外部IP
-  const externalIPPromises = IP_DETECTION_SOURCES.map(async (source) => {
+  const [domesticIP, foreignIP] = await Promise.all(IP_DETECTION_SOURCES.map(async (source) => {
     try {
-      console.log(`正在请求 ${source.name}: ${source.url}`);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), source.timeout);
-
       const response = await fetch(source.url, {
-        signal: controller.signal,
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(source.timeout),
       });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const text = await response.text();
-      const ip = source.parser(text);
-
-      console.log(`${source.name} 返回结果:`, { rawText: text, parsedIP: ip });
-
-      return { source: source.name, ip };
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const ip = normalizePublicIP(source.parser(await response.text()));
+      if (!ip) throw new Error("响应未包含有效公网 IP");
+      return ip;
     } catch (error) {
-      const errorMsg = `${source.name} 获取失败: ${
-        error instanceof Error ? error.message : "未知错误"
-      }`;
-      console.error(errorMsg, error);
-      errors.push(errorMsg);
-      return { source: source.name, ip: null };
+      const message = `${source.name} 获取失败: ${error instanceof Error ? error.message : "未知错误"}`;
+      errors.push(message);
+      console.warn(message);
+      return null;
     }
-  });
-
-  const results = await Promise.allSettled(externalIPPromises);
-
-  // 提取结果
-  let domesticIP: string | null = null;
-  let foreignIP: string | null = null;
-
-  results.forEach((result, index) => {
-    if (result.status === "fulfilled") {
-      const { source, ip } = result.value;
-      if (source.includes("国内")) {
-        domesticIP = ip;
-      } else if (source.includes("国外")) {
-        foreignIP = ip;
-      }
-    } else {
-      errors.push(
-        `${IP_DETECTION_SOURCES[index].name} 请求失败: ${result.reason}`
-      );
-    }
-  });
-
-  // 分析代理类型
-  const { proxyType, confidence } = analyzeProxyType(
-    headerIP,
-    domesticIP,
-    foreignIP
-  );
-
-  // 判断是否使用代理
-  const isUsingProxy = proxyType !== "direct" && proxyType !== "unknown";
-
-  const detectionTime = Date.now() - startTime;
-
-  const result = {
-    headerIP,
-    domesticIP,
-    foreignIP,
-    isUsingProxy,
-    proxyType,
-    confidence,
-    errors,
-    detectionTime,
-  };
-
-  console.log("客户端代理检测完成:", result);
-
-  return result;
+  }));
+  return proxyResult(headerIP, domesticIP, foreignIP, errors, startTime);
 }
