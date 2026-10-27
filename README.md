@@ -101,7 +101,7 @@ BGP、RPKI、RDAP、地图底图与数据库更新需要服务器访问 RIPEstat
 
 Docker 镜像通过 `NODE_USE_ENV_PROXY=1` 启用 [Node.js 原生代理支持](https://nodejs.org/learn/http/enterprise-network-configuration)。配置 `HTTPS_PROXY` 后，外部 HTTPS 请求及重定向会经过该代理，`NO_PROXY` 指定的主机除外。仓库 Compose 会传入宿主环境中的这三个变量。代理地址必须能从容器内访问，容器中的 `127.0.0.1` 指向容器自身。从源码运行时需在启动进程前设置 `NODE_USE_ENV_PROXY=1`。
 
-服务启动时把 Node 双栈地址尝试间隔从默认 250 ms 调到 2000 ms，减少慢线路被过早放弃的情况；这无法修复本身不通的网络。如需其他间隔，可设置 `NODE_OPTIONS=--network-family-autoselection-attempt-timeout=<毫秒>`。日志和接口错误保留每个尝试地址及原因，网络信息或 RPKI 查询失败的响应不会缓存 30 分钟。
+服务启动时把 Node 双栈地址尝试间隔从默认 250 ms 调到 2000 ms，减少慢线路被过早放弃的情况；这无法修复本身不通的网络。如需其他间隔，可设置 `NODE_OPTIONS=--network-family-autoselection-attempt-timeout=<毫秒>`。BGP 前缀、RPKI 和 RDAP 请求遇到超时时重试一次，每次使用独立的超时限制；其他错误直接返回。日志保留重试的上游地址和原因，连续失败仍报告错误，失败响应不会缓存 30 分钟。
 
 地图仅转发当前视图请求的 OSM 瓦片，并按上游缓存头缓存到 `.next/cache/map-tiles`，过期后通过 ETag / Last-Modified 验证。缓存随访问地点增长，目前不会自动清理；可在磁盘不足时清理，未挂载为持久卷时随容器重建清空。地图仍保留 OSM 署名，版权链接只在点击时访问。服务器需能访问 OSM；此方案不能保证所有大陆网络的加载速度。
 

@@ -43,11 +43,20 @@ async function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
 }
 
 async function getJSON(url: string, timeout = 8000): Promise<unknown> {
-  // rdap.org 会拒绝 Node 默认的 User-Agent
-  const response = await fetch(url, { headers: { Accept: "application/rdap+json, application/json", "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(timeout) });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
+  const request = async () => {
+    // rdap.org 会拒绝 Node 默认的 User-Agent；每次尝试都有独立的完整响应超时。
+    const response = await fetch(url, { headers: { Accept: "application/rdap+json, application/json", "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(timeout) });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  };
+  try {
+    return await request();
+  } catch (error) {
+    if (!isFetchTimeout(error)) throw error;
+    console.warn(`网络信息上游请求超时，重试一次（${url}）: ${describeFetchError(error)}`);
+    return request();
+  }
 }
 
 const RPKI_STATUSES: RPKIStatus[] = ["valid", "invalid_asn", "invalid_length", "unknown"];
