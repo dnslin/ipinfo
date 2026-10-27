@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import ReactCountryFlag from "react-country-flag";
-import { Activity, Copy, Globe2, Loader2, RotateCcw, Search, Shield } from "lucide-react";
+import { Activity, Check, Copy, Globe2, Loader2, RotateCcw, Search, Shield } from "lucide-react";
 import type { LatLngTuple } from "leaflet";
 import { toast } from "sonner";
 import { type IPInfo, useIPQueryStore } from "@/lib/store";
@@ -12,7 +12,7 @@ import { IPAddress } from "./ip-address";
 import { LocationDetails, NetworkDetails, StatStrip, locationParts } from "./ip-info-details";
 import { ProxyDetectionSummary } from "./proxy-detection-result";
 import { ResultStage } from "./result-stage";
-import StageMap from "./stage-map";
+import { useSetMapFocus } from "./map-focus";
 import BGPPeersDialog from "./bgp-peers-dialog";
 
 function CountryMark({ code, country }: { code: string; country: string }) {
@@ -34,6 +34,17 @@ export default function IPInfoCard({ ipData }: { ipData: IPInfo }) {
   const { latitude, longitude, accuracy_radius, source: coordinateSource } = currentData.location;
   const center: LatLngTuple | null = !isLocalAddress && latitude !== null && longitude !== null && validateCoordinates(latitude, longitude).isValid ? [latitude, longitude] : null;
   const place = locationParts(currentData).join(" · ");
+  const setMapFocus = useSetMapFocus();
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // 只在坐标或精度真正变化时通知地图，避免每次渲染都触发飞行。
+  const focusLat = center?.[0];
+  const focusLng = center?.[1];
+  useEffect(() => {
+    setMapFocus({ center: focusLat === undefined || focusLng === undefined ? null : [focusLat, focusLng], radius: accuracy_radius });
+  }, [setMapFocus, focusLat, focusLng, accuracy_radius]);
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
 
   const trace = async () => {
     if (isTracing) return;
@@ -63,7 +74,9 @@ export default function IPInfoCard({ ipData }: { ipData: IPInfo }) {
   const copyIP = async () => {
     try {
       await navigator.clipboard.writeText(ipData.ip);
-      toast.success("IP 地址已复制");
+      setCopied(true);
+      clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), 1600);
     } catch {
       toast.error("无法访问剪贴板，请手动复制 IP 地址");
     }
@@ -75,14 +88,16 @@ export default function IPInfoCard({ ipData }: { ipData: IPInfo }) {
 
   return (
     <>
-      <ResultStage map={<StageMap center={center} radius={accuracy_radius} />} note={note}>
+      <ResultStage note={note}>
         <section className="id-card" aria-label="IP 查询结果" data-long={ipData.ip.length > 20 || undefined}>
           <p className="id-eyebrow">{isAutoDetected ? "当前连接 IP" : "查询结果"} · {currentData.ipVersion}</p>
           <h2 className="id-ip" style={{ "--ip-chars": ipData.ip.length } as CSSProperties}><IPAddress value={ipData.ip} /></h2>
           <p className="id-place"><CountryMark code={currentData.countryCode} country={currentData.country} /><span>{isLocalAddress ? "本地网络" : place || "地区信息未提供"}</span></p>
           <p className="id-source">{isLocalAddress ? sourceName : `位置来源 · ${sourceName}`}</p>
           <div className="id-actions">
-            <button type="button" onClick={copyIP} className="id-button id-button-primary" aria-label="复制 IP 地址"><Copy />复制 IP</button>
+            <button type="button" onClick={copyIP} className="id-button id-button-primary" aria-label={copied ? "IP 地址已复制" : "复制 IP 地址"}>
+              <span className="icon-swap" data-done={copied || undefined} aria-hidden="true"><Copy /><Check /></span>{copied ? "已复制" : "复制 IP"}
+            </button>
             {!isLocalAddress && currentData.source !== "MeiTuan" && <button type="button" disabled={isTracing} onClick={trace} className="id-button">{isTracing ? <Loader2 className="animate-spin" /> : <Search />}{isTracing ? "正在查询" : "美团溯源"}</button>}
             {tracedData && <button type="button" onClick={() => { setTracedData(null); setTraceMessage(null); }} className="id-button"><RotateCcw />恢复原始结果</button>}
             {isAutoDetected && !isLocalAddress && <button type="button" disabled={isProxyDetecting} onClick={executeProxyDetection} className="id-button">{isProxyDetecting ? <Loader2 className="animate-spin" /> : <Activity />}{isProxyDetecting ? "检测中" : "代理检测"}</button>}

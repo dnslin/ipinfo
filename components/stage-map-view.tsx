@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Circle, MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
-import { DivIcon, type LatLngTuple } from "leaflet";
+import { DivIcon, point, type LatLngTuple } from "leaflet";
 import { RefreshCw } from "lucide-react";
 import { MAP_TILE_PROVIDERS } from "@/lib/geoip/map-types";
 
@@ -24,10 +24,20 @@ export function zoomForRadius(radius?: number): number {
 
 function Frame({ center, zoom, wide }: { center: LatLngTuple; zoom: number; wide: boolean }) {
   const map = useMap();
+  const placed = useRef(false);
   useEffect(() => {
-    map.setView(center, zoom, { animate: false });
-    // 宽屏时身份卡压在地图左侧，把标记移到右侧可见区域；窄屏时地图在卡片上方，略向上留出卡片重叠区。
-    map.panBy(wide ? [-Math.min(260, map.getSize().x * 0.2), 0] : [0, 40], { animate: false });
+    // 宽屏时身份卡压在地图左侧，把标记放到右侧可见区域；窄屏时卡片叠在地图下沿，标记略向上。
+    const size = map.getSize();
+    const offset = wide ? point(-Math.min(260, size.x * 0.2), 0) : point(0, 40);
+    const target = map.unproject(map.project(center, zoom).add(offset), zoom);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!placed.current || reduceMotion) {
+      map.setView(target, zoom, { animate: false });
+      placed.current = true;
+    } else {
+      // 两次查询之间飞过去，说明新位置相对上一个位置在哪里。
+      map.flyTo(target, zoom, { duration: 1.1, easeLinearity: 0.3 });
+    }
   }, [map, center, zoom, wide]);
   return null;
 }
@@ -41,7 +51,7 @@ export default function StageMapView({ center, radius }: { center: LatLngTuple; 
   const zoom = zoomForRadius(radius);
 
   return (
-    <>
+    <div className="stage-map">
       <MapContainer center={center} zoom={zoom} zoomControl={false} attributionControl keyboard={false} scrollWheelZoom={false} maxZoom={provider.maxZoom} style={{ height: "100%", width: "100%" }}>
         <TileLayer
           key={attempt} url={provider.url} attribution={provider.attribution} maxZoom={provider.maxZoom} className="stage-tiles"
@@ -49,7 +59,7 @@ export default function StageMapView({ center, radius }: { center: LatLngTuple; 
         />
         {/* 半径过大时圆圈会盖满视野，只在能说明范围时绘制。 */}
         {radius !== undefined && radius <= 500 && <Circle center={center} radius={radius * 1000} interactive={false} pathOptions={{ className: "stage-radius" }} />}
-        <Marker position={center} icon={icon} keyboard={false} interactive={false} />
+        <Marker key={center.join(",")} position={center} icon={icon} keyboard={false} interactive={false} />
         <Frame center={center} zoom={zoom} wide={wide} />
       </MapContainer>
       {tileError && (
@@ -57,6 +67,6 @@ export default function StageMapView({ center, radius }: { center: LatLngTuple; 
           <RefreshCw className="h-3.5 w-3.5" />底图加载失败，重试
         </button>
       )}
-    </>
+    </div>
   );
 }

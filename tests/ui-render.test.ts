@@ -117,3 +117,19 @@ test("long IPv6 results size the title by length and widen the identity card", (
   const short = renderToStaticMarkup(createElement(IPInfoCard, { ipData }));
   assert.doesNotMatch(short, /data-long/);
 });
+
+test("each administrative level keeps its name and code on one row", () => {
+  const html = renderToStaticMarkup(createElement(IPInfoCard, { ipData: {
+    ...ipData, country: "中国", countryCode: "CN", province: "广东省", provinceCode: "440000",
+    city: "深圳市", cityCode: "440300", district: "坪山区", districtCode: "440310", source: "GeoCN",
+  } }));
+  const rows = [...html.matchAll(/<div class="detail-row region-row">(.*?)<\/div>/g)].map((match) => match[1].replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim());
+  assert.deepEqual(rows, ["国家/地区 中国 CN", "省份 广东省 440000", "城市 深圳市 440300", "区县 坪山区 440310"]);
+});
+
+test("a municipality whose province and city share a name lists it once", () => {
+  const html = renderToStaticMarkup(createElement(IPInfoCard, { ipData: {
+    ...ipData, country: "中国", countryCode: "CN", province: "北京市", city: "北京市", district: "海淀区", source: "GeoCN",
+  } }));
+  assert.equal(html.match(/<div class="detail-row region-row">/g)?.length, 3);
+});
