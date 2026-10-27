@@ -1,33 +1,65 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { LocateFixed } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useIPQueryStore } from "@/lib/store";
 import { isValidIP, checkPrivateIP } from "@/lib/ip-detection";
 import { IPQueryInput } from "@/components/ui/ip-query-input";
 import { toast } from "sonner";
 
+const isEditable = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
 export default function IPQueryForm() {
   const [inputValue, setInputValue] = useState("");
-  const { setQuery, executeQuery, isLoading, error, clearError } = useIPQueryStore();
-  const changeInput = (value: string) => { setInputValue(value); clearError(); };
+  const [invalid, setInvalid] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { setQuery, executeQuery, isLoading, clearError } = useIPQueryStore();
+  const changeInput = (value: string) => { setInputValue(value); setInvalid(false); clearError(); };
+
+  // “/” 聚焦查询框：高频键盘操作，只移动焦点，不加动画。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey || isEditable(event.target)) return;
+      if (document.querySelector("[role=dialog]")) return;
+      event.preventDefault();
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // 无效输入：红色描边说明状态，轻微左右摆动作为反馈；减少动态效果时只保留描边。
+  const reject = (title: string, description: string, warning = false) => {
+    setInvalid(true);
+    (warning ? toast.warning : toast.error)(title, { description });
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      formRef.current?.animate(
+        [{ transform: "translateX(0)" }, { transform: "translateX(-6px)" }, { transform: "translateX(5px)" }, { transform: "translateX(-3px)" }, { transform: "translateX(0)" }],
+        { duration: 280, easing: "cubic-bezier(0.23, 1, 0.32, 1)" },
+      );
+    }
+    inputRef.current?.focus();
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isLoading) return;
     const ip = inputValue.trim();
     if (ip && !isValidIP(ip)) {
-      toast.error("IP 地址格式错误", { description: "请输入有效的 IPv4 或 IPv6 地址" });
+      reject("IP 地址格式错误", "请输入有效的 IPv4 或 IPv6 地址");
       return;
     }
     if (ip) {
       const privateAddress = checkPrivateIP(ip);
       if (privateAddress.isPrivate) {
-        toast.warning(privateAddress.message, { description: privateAddress.description });
+        reject(privateAddress.message, privateAddress.description, true);
         return;
       }
     }
     setQuery(ip);
+    inputRef.current?.blur();
     await executeQuery(ip || undefined);
   };
 
@@ -38,18 +70,11 @@ export default function IPQueryForm() {
   };
 
   return (
-    <div className="w-full">
-      <IPQueryInput value={inputValue} disabled={isLoading} onChange={(event) => changeInput(event.target.value)} onSubmit={submit} />
-      {error && <p role="alert" className="mt-3 text-left text-sm text-[rgb(var(--color-error))]">{error}</p>}
-      <div className="query-extras">
-        <button type="button" disabled={isLoading} onClick={queryMyIP} className="ui-button gap-1.5">
-          <LocateFixed className="h-3.5 w-3.5" />查询我的 IP
-        </button>
-        <span className="h-3 w-px bg-[rgb(var(--color-border))]" aria-hidden="true" />
-        <span>试一试</span>
-        <button type="button" disabled={isLoading} onClick={() => changeInput("8.8.8.8")} className="ui-button" aria-label="填入 IPv4 示例 8.8.8.8"><span className="font-mono">8.8.8.8</span></button>
-        <button type="button" disabled={isLoading} onClick={() => changeInput("2001:4860:4860::8888")} className="ui-button" aria-label="填入 IPv6 示例">IPv6 示例</button>
-      </div>
-    </div>
+    <IPQueryInput
+      formRef={formRef} inputRef={inputRef} value={inputValue} disabled={isLoading} invalid={invalid}
+      onChange={(event) => changeInput(event.target.value)}
+      onSubmit={submit} onLocate={queryMyIP}
+      onEscape={() => (inputValue ? changeInput("") : inputRef.current?.blur())}
+    />
   );
 }
